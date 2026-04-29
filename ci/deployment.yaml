@@ -17,7 +17,7 @@ spec:
       hostNetwork: true
       containers:
         - name: rubberduck
-          image: ghcr.io/OWNER/REPOSITORY:latest
+          image: IMAGE_PLACEHOLDER
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

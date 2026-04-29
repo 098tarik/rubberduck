@@ -31,14 +31,29 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./ci/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Render deployment manifest
+        run: |
+          sed \
+            "s|IMAGE_PLACEHOLDER|${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest|g" \
+            ci/deployment.yaml > ci/deployment.rendered.yaml
 
       - name: Setup Tailscale
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Copy deployment manifest to Pi
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PI_HOST }}
+          username: ${{ secrets.PI_USER }}
+          key: ${{ secrets.PI_SSH_KEY }}
+          source: ci/deployment.rendered.yaml
+          target: /tmp
 
       - name: Deploy to K3s
         uses: appleboy/ssh-action@v1
@@ -47,63 +62,5 @@ jobs:
           username: ${{ secrets.PI_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
           script: |
-            cat <<'EOF' >/tmp/rubberduck-deployment.yaml
-            apiVersion: apps/v1
-            kind: Deployment
-            metadata:
-              name: rubberduck
-              labels:
-                app: rubberduck
-            spec:
-              replicas: 1
-              selector:
-                matchLabels:
-                  app: rubberduck
-              template:
-                metadata:
-                  labels:
-                    app: rubberduck
-                spec:
-                  hostNetwork: true
-                  containers:
-                    - name: rubberduck
-                      image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-                      imagePullPolicy: Always
-                      ports:
-                        - containerPort: 8000
-                      env:
-                        - name: OLLAMA_URL
-                          value: "http://127.0.0.1:11434"
-                        - name: OLLAMA_MODEL
-                          value: "deepseek-r1:8b"
-            ---
-            apiVersion: v1
-            kind: Service
-            metadata:
-              name: rubberduck
-            spec:
-              selector:
-                app: rubberduck
-              ports:
-                - port: 80
-                  targetPort: 8000
-            ---
-            apiVersion: networking.k8s.io/v1
-            kind: Ingress
-            metadata:
-              name: rubberduck
-            spec:
-              rules:
-                - host: rubberduck.local
-                  http:
-                    paths:
-                      - path: /
-                        pathType: Prefix
-                        backend:
-                          service:
-                            name: rubberduck
-                            port:
-                              number: 80
-            EOF
-            sudo k3s kubectl apply -f /tmp/rubberduck-deployment.yaml
+            sudo k3s kubectl apply -f /tmp/ci/deployment.rendered.yaml
             sudo k3s kubectl rollout restart deployment/rubberduck
