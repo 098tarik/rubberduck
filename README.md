@@ -1,57 +1,130 @@
 # 🦆 rubberduck.ai
 
-Local AI chat assistant powered by FastAPI, Ollama, and a small web UI.
+`rubberduck.ai` is a small local chat app that talks to an Ollama model.
+It gives you a simple web interface where you can ask questions, keep chat
+history, switch models, render Markdown, and view code blocks with syntax
+highlighting.
 
-## Quick Start
+## What this project does
+
+- Runs a FastAPI server
+- Connects to a local Ollama instance
+- Streams model responses to the browser
+- Saves chat sessions locally
+- Shows responses in a clean web UI
+
+## Requirements
+
+Before you start, make sure you have:
+
+- Python 3.11+
+- Ollama installed and running
+- At least one Ollama model pulled locally
+
+Example:
+
+```bash
+ollama pull deepseek-r1:8b
+```
+
+## Run locally
+
+1. Install Python dependencies:
 
 ```bash
 python3 -m pip install -r requirements.txt
+```
+
+2. Make sure Ollama is running.
+
+3. Start the app:
+
+```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open http://localhost:8000
+4. Open the app in your browser:
 
-## Docker
+```text
+http://localhost:8000
+```
+
+## Configuration
+
+The app uses these environment variables:
+
+- `OLLAMA_URL` - URL of your Ollama server
+- `OLLAMA_MODEL` - default model to use
+- `SESSIONS_DIR` - folder used to store chat history
+
+Example:
+
+```bash
+export OLLAMA_URL=http://localhost:11434
+export OLLAMA_MODEL=deepseek-r1:8b
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+## Run with Docker
+
+Build the image:
 
 ```bash
 docker build -f ci/Dockerfile -t rubberduck .
+```
+
+Run the container:
+
+```bash
 docker run --rm -p 8000:8000 \
   -e OLLAMA_URL=http://host.docker.internal:11434 \
   -e OLLAMA_MODEL=deepseek-r1:8b \
   rubberduck
 ```
 
-## GitHub Packaging
+Then open:
 
-This repository is now structured for GitHub-based builds and deployment:
+```text
+http://localhost:8000
+```
 
-- Docker build config: [ci/Dockerfile](ci/Dockerfile)
-- Python dependencies: [requirements.txt](requirements.txt)
-- GitHub Actions workflow: [.github/workflows/deploy.yml](.github/workflows/deploy.yml)
-- Kubernetes manifest template: [ci/deployment.yaml](ci/deployment.yaml)
+## Project structure
 
-## GitHub Secrets Required
+- [main.py](main.py) - app entry point
+- [app](app) - backend server code
+- [assets](assets) - frontend CSS and JavaScript
+- [index.html](index.html) - main web page
+- [requirements.txt](requirements.txt) - Python dependencies
+- [ci](ci) - container and deployment files
 
-Add these repository secrets before enabling the workflow:
+## Deploy from GitHub
+
+This repo includes:
+
+- [ci/Dockerfile](ci/Dockerfile)
+- [ci/deployment.yaml](ci/deployment.yaml)
+- [.github/workflows/deploy.yml](.github/workflows/deploy.yml)
+
+If you want GitHub Actions to deploy this app for you, add these repository
+secrets:
 
 - `PI_HOST`
 - `PI_USER`
 - `PI_SSH_KEY`
 - `TS_AUTHKEY`
 
-## Deploy to K3s via GitHub Actions
+Then pushing to `main` will:
 
-Push to `main` and the workflow will:
+1. Build the Docker image
+2. Push it to GitHub Container Registry
+3. Copy the deployment manifest to your server
+4. Apply the Kubernetes deployment
 
-1. Build the Docker image.
-2. Push it to GitHub Container Registry.
-3. Connect to your Pi over Tailscale.
-4. Apply the Kubernetes deployment.
+## Manual deployment
 
-## Manual Kubernetes Manifest
-
-If you want to deploy manually, update the image in [ci/deployment.yaml](ci/deployment.yaml)
-to your actual GitHub Container Registry path, for example:
+If you want to deploy manually, edit the image in
+[ci/deployment.yaml](ci/deployment.yaml) so it points to your container image,
+for example:
 
 ```text
 ghcr.io/your-user-or-org/your-repo:latest
