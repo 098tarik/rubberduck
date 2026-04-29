@@ -1,0 +1,16 @@
+.git
+.github
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+node_modules/
+sessions/
+claude-code/
+style.txt
+README.md
+deploy.yml
+deployment.yaml

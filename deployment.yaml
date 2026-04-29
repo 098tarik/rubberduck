@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rubberduck
+  labels:
+    app: rubberduck
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rubberduck
+  template:
+    metadata:
+      labels:
+        app: rubberduck
+    spec:
+      hostNetwork: true
+      containers:
+        - name: rubberduck
+          image: ghcr.io/OWNER/REPOSITORY:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: OLLAMA_URL
+              value: "http://127.0.0.1:11434"
+            - name: OLLAMA_MODEL
+              value: "deepseek-r1:8b"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rubberduck
+spec:
+  selector:
+    app: rubberduck
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rubberduck
+spec:
+  rules:
+    - host: rubberduck.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rubberduck
+                port:
+                  number: 80

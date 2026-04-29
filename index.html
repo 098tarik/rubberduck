@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rubberduck.ai</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 100'%3E%3Crect width='120' height='100' rx='20' fill='%23f5c518'/%3E%3Cellipse cx='60' cy='68' rx='38' ry='28' fill='%230a0a0a'/%3E%3Cellipse cx='72' cy='72' rx='18' ry='12' fill='%230a0a0a' opacity='0.5' transform='rotate(-10 72 72)'/%3E%3Cellipse cx='42' cy='50' rx='13' ry='16' fill='%230a0a0a'/%3E%3Ccircle cx='36' cy='36' r='18' fill='%230a0a0a'/%3E%3Ccircle cx='30' cy='31' r='4' fill='white'/%3E%3Ccircle cx='29' cy='31' r='2' fill='%23333'/%3E%3Ccircle cx='28.2' cy='30.2' r='0.7' fill='white'/%3E%3Cellipse cx='18' cy='37' rx='10' ry='5' fill='%230a0a0a' opacity='0.7' transform='rotate(-10 18 37)'/%3E%3Cellipse cx='18' cy='41' rx='9' ry='4' fill='%230a0a0a' opacity='0.5' transform='rotate(-10 18 41)'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/assets/css/index.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github-dark.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/highlight.min.js"></script>
+    <script defer src="/static/assets/js/app.js"></script>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <div class="logo">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="28" height="24" aria-label="rubber duck">
+                    <ellipse cx="60" cy="68" rx="38" ry="28" fill="#0a0a0a"/>
+                    <ellipse cx="72" cy="72" rx="18" ry="12" fill="#0a0a0a" opacity="0.5" transform="rotate(-10 72 72)"/>
+                    <ellipse cx="42" cy="50" rx="13" ry="16" fill="#0a0a0a"/>
+                    <circle cx="36" cy="36" r="18" fill="#0a0a0a"/>
+                    <circle cx="30" cy="31" r="4" fill="white"/>
+                    <circle cx="29" cy="31" r="2" fill="#333"/>
+                    <circle cx="28.2" cy="30.2" r="0.7" fill="white"/>
+                    <ellipse cx="18" cy="37" rx="10" ry="5" fill="#0a0a0a" opacity="0.7" transform="rotate(-10 18 37)"/>
+                    <ellipse cx="18" cy="41" rx="9" ry="4" fill="#0a0a0a" opacity="0.5" transform="rotate(-10 18 41)"/>
+                </svg>
+            </div>
+            <div class="header-text">
+                <h1>rubberduck.ai</h1>
+                <span>your thinking companion</span>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="welcome" id="welcome">
+                <div class="welcome-duck">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="120" height="100" aria-label="rubber duck">
+                        <!-- Body -->
+                        <ellipse cx="60" cy="68" rx="38" ry="28" fill="#f5c518"/>
+                        <!-- Wing -->
+                        <ellipse cx="72" cy="72" rx="18" ry="12" fill="#e0a800" transform="rotate(-10 72 72)"/>
+                        <!-- Neck -->
+                        <ellipse cx="42" cy="50" rx="13" ry="16" fill="#f5c518"/>
+                        <!-- Head -->
+                        <circle cx="36" cy="36" r="18" fill="#f5c518"/>
+                        <!-- Eye -->
+                        <circle cx="30" cy="31" r="4" fill="white"/>
+                        <circle cx="29" cy="31" r="2" fill="#1a1a1a"/>
+                        <circle cx="28.2" cy="30.2" r="0.7" fill="white"/>
+                        <!-- Beak top -->
+                        <ellipse cx="18" cy="37" rx="10" ry="5" fill="#ff8c00" transform="rotate(-10 18 37)"/>
+                        <!-- Beak bottom -->
+                        <ellipse cx="18" cy="41" rx="9" ry="4" fill="#e07000" transform="rotate(-10 18 41)"/>
+                        <!-- Water ripple -->
+                        <ellipse cx="60" cy="94" rx="42" ry="5" fill="rgba(100,180,255,0.25)"/>
+                        <ellipse cx="60" cy="94" rx="30" ry="3" fill="rgba(100,180,255,0.2)"/>
+                    </svg>
+                </div>
+                <h2>quack quack</h2>
+                <p>I'm your rubber duck debugger — talk through your problems and I'll help you think clearly.</p>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <!--
+              Toolbar mirrors Claude Code's header bar:
+                • model selector  ← same as Claude Code's model picker
+                • session selector ← mirrors launchResumeChooser()
+                • new session btn  ← mirrors "new conversation" action
+                • session ID badge ← mirrors session ID shown in Claude Code UI
+            -->
+            <div class="toolbar">
+                <select id="modelSelect" aria-label="Select model"></select>
+                <select id="sessionSelect" aria-label="Resume session"></select>
+                <button class="new-session-btn" onclick="newSession()">+ New</button>
+                <span class="session-id" id="sessionIdBadge"></span>
+            </div>
+            <div class="input-wrapper">
+                <textarea
+                    id="messageInput"
+                    placeholder="Tell the duck what's on your mind..."
+                    rows="1"
+                    autofocus
+                ></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
+            <div class="footer-text">rubberduck.ai</div>
+        </div>
+    </div>
+
+</body>
+</html>
