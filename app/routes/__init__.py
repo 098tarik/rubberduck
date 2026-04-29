@@ -1,7 +1,6 @@
 """Route exports for the FastAPI application package."""
 
-from rubberduck.app.routes import sessions
-from rubberduck.app.routes import chat, models
+from app.routes import chat, models, sessions
 
 
 chat_router = chat.router

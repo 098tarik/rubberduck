@@ -4,7 +4,7 @@ import fastapi
 import fastapi.responses
 import fastapi.staticfiles
 
-from rubberduck.app import routes
+from app import routes
 
 
 app = fastapi.FastAPI(title="RubberDuck")

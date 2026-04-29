@@ -2,7 +2,7 @@
 
 import fastapi
 
-from rubberduck.app import history
+from app import history
 
 router = fastapi.APIRouter()
 

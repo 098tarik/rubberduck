@@ -1,3 +1,3 @@
 """Application entry point for the RubberDuck FastAPI server."""
 
-from rubberduck.app import app  # noqa: F401
+from app import app  # noqa: F401

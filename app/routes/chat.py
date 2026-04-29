@@ -6,8 +6,7 @@ import fastapi
 import fastapi.responses
 import pydantic
 
-from rubberduck.app import query_engine
-from rubberduck.app import config
+from app import config, query_engine
 
 router = fastapi.APIRouter()
 

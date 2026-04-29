@@ -5,7 +5,7 @@ import json
 import pathlib
 from typing import Any, TypeAlias
 
-from rubberduck.app import config
+from app import config
 
 
 SessionMessages: TypeAlias = list[dict[str, Any]]

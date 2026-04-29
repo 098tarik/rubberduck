@@ -3,7 +3,7 @@
 import fastapi
 import httpx
 
-from rubberduck.app import config
+from app import config
 
 router = fastapi.APIRouter()
 

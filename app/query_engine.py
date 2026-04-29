@@ -5,8 +5,7 @@ import json
 
 import httpx
 
-from rubberduck.app import messages
-from rubberduck.app import config, context, history
+from app import config, context, history, messages
 
 
 class QueryEngine:
