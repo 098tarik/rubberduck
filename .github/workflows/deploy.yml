@@ -69,5 +69,10 @@ jobs:
           username: ${{ secrets.PI_USER }}
           key: ${{ secrets.PI_SSH_KEY }}
           script: |
+            if ! sudo systemctl is-active --quiet k3s; then
+              echo "k3s is not running, restarting..."
+              sudo systemctl restart k3s
+              sudo k3s kubectl wait --for=condition=Ready node --all --timeout=120s
+            fi
             sudo k3s kubectl apply -f /tmp/ci/deployment.rendered.yaml
             sudo k3s kubectl rollout restart deployment/rubberduck
