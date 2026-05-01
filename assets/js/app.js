@@ -9,6 +9,7 @@ const sessionBadge = document.getElementById('sessionIdBadge');
 let sessionId = null;
 let isStreaming = false;
 let currentRequestId = null;
+let currentAbortController = null;
 
 const SEND_ICON_SVG = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
 const STOP_ICON_SVG = `<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>`;
@@ -327,6 +328,10 @@ async function streamAssistantResponse(response) {
 }
 
 async function cancelMessage() {
+    if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+    }
     const requestId = currentRequestId;
     if (!requestId) {
         return;
@@ -346,12 +351,14 @@ async function sendMessage() {
     }
 
     isStreaming = true;
-    sendBtn.disabled = true;
     messageInput.value = '';
     messageInput.style.height = 'auto';
 
     addMessage('user', text);
     addTypingIndicator();
+    setStopMode();
+
+    currentAbortController = new AbortController();
 
     try {
         const response = await fetch('/api/chat', {
@@ -362,7 +369,10 @@ async function sendMessage() {
                 session_id: sessionId,
                 model: modelSelect.value,
             }),
+            signal: currentAbortController.signal,
         });
+
+        currentAbortController = null;
 
         if (!response.ok) {
             throw new Error(await response.text() || `HTTP ${response.status}`);
@@ -371,14 +381,16 @@ async function sendMessage() {
         updateSessionBadge(response.headers.get('X-Session-Id'));
         currentRequestId = response.headers.get('X-Request-Id');
         removeTypingIndicator();
-        setStopMode();
         await streamAssistantResponse(response);
         await loadSessions();
     } catch (error) {
         removeTypingIndicator();
-        addMessage('assistant', `Quack! ${error?.message || 'Something went wrong.'}`);
+        if (error?.name !== 'AbortError') {
+            addMessage('assistant', `Quack! ${error?.message || 'Something went wrong.'}`);
+        }
     }
 
+    currentAbortController = null;
     currentRequestId = null;
     isStreaming = false;
     setSendMode();
