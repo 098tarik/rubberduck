@@ -80,9 +80,8 @@ class QueryEngine:
                         if should_stop:
                             break
 
-            if full_text:
-                asst_msg = messages.AssistantMessage(content=full_text)
-                self.append(asst_msg.model_dump())
+            asst_msg = messages.AssistantMessage(content=full_text)
+            self.append(asst_msg.model_dump())
 
             if aborted:
                 yield "data: [DONE]\n\n"
