@@ -67,14 +67,15 @@ async function loadModels() {
     try {
         const response = await fetch('/api/models');
         const payload = await response.json();
-        const models = payload.models || [];
+        const models = (payload.models || []).filter((m) => !m.endsWith(':cloud'));
 
         modelSelect.innerHTML = '';
-        for (const model of models.length ? models : [payload.default || 'deepseek-r1:8b']) {
+        const defaultModel = payload.default || 'deepseek-r1:8b';
+        for (const model of models.length ? models : [defaultModel]) {
             const option = document.createElement('option');
             option.value = model;
             option.textContent = model;
-            if (model === payload.default) {
+            if (model === defaultModel) {
                 option.selected = true;
             }
             modelSelect.appendChild(option);
