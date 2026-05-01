@@ -22,7 +22,7 @@ async def list_models() -> dict[str, object]:
         models = [
             item["name"]
             for item in payload.get("models", [])
-            if item.get("name")
+            if item.get("name") and not item["name"].endswith(":cloud")
         ]
         return {"models": models, "default": config.DEFAULT_MODEL}
     except httpx.HTTPError as error:
