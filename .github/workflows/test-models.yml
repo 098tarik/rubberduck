@@ -1,0 +1,30 @@
+name: Test Ollama Models
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-models:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run Ollama model tests
+        env:
+          OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
+        run: pytest tests/test_ollama_models.py -v
