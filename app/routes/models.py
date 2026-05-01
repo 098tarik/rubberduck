@@ -3,7 +3,7 @@
 import fastapi
 import httpx
 
-from app import config
+from app import config, telemetry
 
 router = fastapi.APIRouter()
 
@@ -24,8 +24,10 @@ async def list_models() -> dict[str, object]:
             for item in payload.get("models", [])
             if item.get("name") and not item["name"].endswith(":cloud")
         ]
+        telemetry.record("models_listed", count=len(models))
         return {"models": models, "default": config.DEFAULT_MODEL}
     except httpx.HTTPError as error:
+        telemetry.record("models_listed_error", reason=str(error))
         return {
             "models": [config.DEFAULT_MODEL],
             "default": config.DEFAULT_MODEL,
