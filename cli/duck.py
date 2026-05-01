@@ -10,6 +10,15 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
+from rich import box
+from rich.columns import Columns
+from rich.console import Console
+from rich.live import Live
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.spinner import Spinner
+from rich.table import Table
+from rich.text import Text
 
 # ---------------------------------------------------------------------------
 # Configuration (mirrors app/config.py, no shared dependency)
@@ -28,6 +37,8 @@ SYSTEM_PROMPT = (
     "You are RubberDuck, a helpful and friendly AI assistant. "
     "Keep responses concise and helpful."
 )
+
+console = Console()
 
 # ---------------------------------------------------------------------------
 # Session helpers
@@ -53,15 +64,96 @@ def save_session(session_id: str, messages: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# UI helpers
+# ---------------------------------------------------------------------------
+
+
+def _duck_panel(content: str, title: str = "🦆 RubberDuck") -> Panel:
+    """Wrap text in a duck-themed panel with Markdown rendering."""
+    return Panel(
+        Markdown(content) if content.strip() else Text(""),
+        title=title,
+        border_style="yellow",
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
+def _print_welcome(model: str, session_id: str) -> None:
+    header = Text.assemble(
+        ("🦆 RubberDuck", "bold yellow"),
+        ("  —  AI assistant powered by Ollama", "dim"),
+    )
+    subtitle = Text.assemble(
+        ("model: ", "dim"),
+        (model, "yellow"),
+        ("   session: ", "dim"),
+        (session_id[:8], "yellow"),
+    )
+    console.print(
+        Panel(
+            header,
+            subtitle=subtitle,
+            border_style="yellow",
+            box=box.DOUBLE_EDGE,
+            padding=(0, 2),
+        )
+    )
+    console.print(
+        "[dim]  /help  for commands · /quit  to exit[/dim]\n"
+    )
+
+
+def _print_help(model: str) -> None:
+    table = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
+    table.add_column(style="yellow bold")
+    table.add_column(style="dim")
+    rows = [
+        ("/new", "start a new session"),
+        (f"/model <name>", f"switch model [yellow](current: {model})[/yellow]"),
+        ("/history", "print conversation history"),
+        ("/quit", "exit"),
+    ]
+    for cmd, desc in rows:
+        table.add_row(cmd, desc)
+    console.print(
+        Panel(table, title="Commands", border_style="yellow", box=box.ROUNDED)
+    )
+
+
+def _print_history(history: list[dict]) -> None:
+    if not history:
+        console.print("[dim]  No messages in this session yet.[/dim]\n")
+        return
+    for msg in history:
+        role = msg["role"]
+        if role == "user":
+            console.print(
+                Panel(
+                    msg["content"],
+                    title="[bold]You[/bold]",
+                    border_style="blue",
+                    box=box.ROUNDED,
+                    padding=(0, 1),
+                )
+            )
+        else:
+            console.print(_duck_panel(msg["content"]))
+
+
+def _prompt_user() -> str:
+    """Display a styled prompt and return the user's input."""
+    console.print("[bold yellow]❯[/bold yellow] ", end="")
+    return input()
+
+
+# ---------------------------------------------------------------------------
 # Ollama streaming
 # ---------------------------------------------------------------------------
 
 
-def stream_chat(
-    messages: list[dict],
-    model: str,
-) -> str:
-    """Stream a chat response from Ollama and print it; return full text."""
+def stream_chat(messages: list[dict], model: str) -> str:
+    """Stream a response from Ollama, rendering it live in a duck panel."""
     payload = {
         "model": model,
         "messages": [
@@ -72,43 +164,51 @@ def stream_chat(
     }
 
     full_text = ""
+    spinner = Spinner("dots", text=Text(" thinking…", style="yellow dim"))
+
     try:
         with httpx.Client(timeout=120.0) as client:
             with client.stream(
                 "POST", f"{OLLAMA_URL}/api/chat", json=payload
             ) as response:
                 response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if chunk.get("done"):
-                        break
-                    text = chunk.get("message", {}).get("content", "")
-                    if text:
-                        print(text, end="", flush=True)
-                        full_text += text
-    except httpx.HTTPError as exc:
-        print(f"\n[error] {exc}", file=sys.stderr)
+                with Live(
+                    spinner,
+                    console=console,
+                    refresh_per_second=12,
+                    transient=True,
+                ) as live:
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if chunk.get("done"):
+                            break
+                        text = chunk.get("message", {}).get("content", "")
+                        if text:
+                            full_text += text
+                            live.update(_duck_panel(full_text))
 
-    print()  # trailing newline
+    except httpx.HTTPError as exc:
+        console.print(
+            Panel(
+                f"[red]{exc}[/red]",
+                title="[red]Error[/red]",
+                border_style="red",
+                box=box.ROUNDED,
+            )
+        )
+
+    console.print()
     return full_text
 
 
 # ---------------------------------------------------------------------------
 # REPL
 # ---------------------------------------------------------------------------
-
-HELP_TEXT = """\
-Commands:
-  /new          start a new session
-  /model <name> switch model (current: {model})
-  /history      show message history for this session
-  /quit         exit
-"""
 
 
 def run_repl(initial_prompt: str | None = None) -> None:
@@ -117,40 +217,40 @@ def run_repl(initial_prompt: str | None = None) -> None:
     model = DEFAULT_MODEL
     history: list[dict] = []
 
-    print(f"🦆 RubberDuck CLI  (model: {model}  session: {session_id[:8]})")
-    print('Type /quit to exit, /new for a new session, or /help for commands.\n')
+    _print_welcome(model, session_id)
 
-    def _handle(prompt: str) -> None:
+    def _handle(user_input: str) -> None:
         nonlocal session_id, model, history
 
-        stripped = prompt.strip()
+        stripped = user_input.strip()
         if not stripped:
             return
 
         if stripped == "/quit":
+            console.print("\n[yellow dim]Goodbye 🦆[/yellow dim]\n")
             raise SystemExit(0)
 
         if stripped == "/new":
             session_id = str(uuid.uuid4())
             history = []
-            print(f"[new session: {session_id[:8]}]\n")
+            console.print(
+                f"[yellow dim]  ↺  New session started: {session_id[:8]}[/yellow dim]\n"
+            )
             return
 
         if stripped == "/help":
-            print(HELP_TEXT.format(model=model))
+            _print_help(model)
             return
 
         if stripped == "/history":
-            if not history:
-                print("[no messages yet]\n")
-            for msg in history:
-                role = msg["role"].upper()
-                print(f"[{role}] {msg['content']}\n")
+            _print_history(history)
             return
 
         if stripped.startswith("/model "):
             model = stripped[len("/model "):].strip()
-            print(f"[model switched to: {model}]\n")
+            console.print(
+                f"[yellow dim]  ✓  Switched to model: {model}[/yellow dim]\n"
+            )
             return
 
         # Regular message
@@ -162,9 +262,7 @@ def run_repl(initial_prompt: str | None = None) -> None:
             }
         )
 
-        print(f"\n🦆  ", end="", flush=True)
         reply = stream_chat(history, model)
-        print()
 
         history.append(
             {
@@ -181,11 +279,11 @@ def run_repl(initial_prompt: str | None = None) -> None:
 
     while True:
         try:
-            prompt = input("you> ")
+            user_input = _prompt_user()
         except (EOFError, KeyboardInterrupt):
-            print()
+            console.print("\n[yellow dim]Goodbye 🦆[/yellow dim]\n")
             break
-        _handle(prompt)
+        _handle(user_input)
 
 
 # ---------------------------------------------------------------------------

@@ -28,14 +28,18 @@ duck
 ```
 
 ```
-🦆 RubberDuck CLI  (model: deepseek-r1:8b  session: a3f2c1b0)
-Type /quit to exit, /new for a new session, or /help for commands.
+╔══════════════════════════════════════════════════════════╗
+║  🦆 RubberDuck  —  AI assistant powered by Ollama        ║
+╚════════════════ model: deepseek-r1:8b  session: a3f2c1b0 ╝
+  /help  for commands · /quit  to exit
 
-you> explain recursion in one sentence
-🦆  Recursion is when a function calls itself to solve smaller instances of the
-    same problem until it reaches a base case.
+❯ explain recursion in one sentence
+╭────────────────────── 🦆 RubberDuck ───────────────────────╮
+│ Recursion is when a function calls itself to solve smaller  │
+│ sub-problems until it hits a base case that stops the chain │
+╰────────────────────────────────────────────────────────────╯
 
-you>
+❯
 ```
 
 ### Single-shot prompt

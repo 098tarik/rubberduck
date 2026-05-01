@@ -9,6 +9,7 @@ description = "Barebones terminal chat client for Ollama — CLI version of rubb
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.28,<1.0",
+    "rich>=13.0,<14.0",
 ]
 
 [project.scripts]
