@@ -14,8 +14,12 @@ TEST_PROMPT = "Reply with exactly one word: hello"
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Parametrize tests that declare the ``model`` fixture with live Ollama models."""
     if "model" in metafunc.fixturenames:
-        response = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=10.0)
-        response.raise_for_status()
+        try:
+            response = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=10.0)
+            response.raise_for_status()
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            pytest.skip(f"Ollama server unavailable: {exc}")
+            return
         models = [
             item["name"]
             for item in response.json().get("models", [])
