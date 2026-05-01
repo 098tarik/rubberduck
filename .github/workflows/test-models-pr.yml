@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pip install ".[dev]"
 
+      - name: Run unit tests
+        run: pytest tests/ --ignore=tests/test_ollama_models.py -v
+
       - name: Run Ollama model tests
         env:
           OLLAMA_URL: ${{ secrets.OLLAMA_URL }}
