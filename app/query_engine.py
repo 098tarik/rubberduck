@@ -1,5 +1,6 @@
 """Session-scoped query engine for streaming chat responses."""
 
+import asyncio
 from collections.abc import AsyncIterator
 import json
 
@@ -26,11 +27,17 @@ class QueryEngine:
         """Return a shallow copy of the current session history."""
         return list(self._messages)
 
-    async def query(self, user_content: str) -> AsyncIterator[str]:
+    async def query(
+        self,
+        user_content: str,
+        abort_event: asyncio.Event | None = None,
+    ) -> AsyncIterator[str]:
         """Stream a single assistant response as Server-Sent Events.
 
         Args:
             user_content: The newest user message to append to the session.
+            abort_event: Optional event that, when set, cancels the in-flight
+                request after the current streaming chunk.
 
         Yields:
             SSE data frames containing streamed text chunks or an error payload.
@@ -42,6 +49,7 @@ class QueryEngine:
         ollama_messages = self._build_ollama_messages(system_context)
 
         full_text = ""
+        aborted = False
         try:
             async with httpx.AsyncClient() as client:
                 async with client.stream(
@@ -56,6 +64,10 @@ class QueryEngine:
                 ) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
+                        if abort_event and abort_event.is_set():
+                            aborted = True
+                            break
+
                         if not line:
                             continue
 
@@ -68,8 +80,12 @@ class QueryEngine:
                         if should_stop:
                             break
 
-            asst_msg = messages.AssistantMessage(content=full_text)
-            self.append(asst_msg.model_dump())
+            if full_text:
+                asst_msg = messages.AssistantMessage(content=full_text)
+                self.append(asst_msg.model_dump())
+
+            if aborted:
+                yield "data: [DONE]\n\n"
 
         except httpx.HTTPError as error:
             yield f"data: {json.dumps({'error': str(error)})}\n\n"
