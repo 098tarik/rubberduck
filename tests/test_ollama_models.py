@@ -19,7 +19,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         models = [
             item["name"]
             for item in response.json().get("models", [])
-            if item.get("name")
+            if item.get("name") and not item["name"].endswith(":cloud")
         ]
         metafunc.parametrize("model", models)
 
