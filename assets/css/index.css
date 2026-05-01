@@ -348,6 +348,14 @@ html, body {
     fill: var(--bg);
 }
 
+.send-btn.stop {
+    background: #c0392b;
+}
+
+.send-btn.stop svg {
+    fill: #fff;
+}
+
 .footer-text {
     text-align: center;
     padding-top: 10px;

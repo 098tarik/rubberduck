@@ -8,6 +8,10 @@ const sessionBadge = document.getElementById('sessionIdBadge');
 
 let sessionId = null;
 let isStreaming = false;
+let currentRequestId = null;
+
+const SEND_ICON_SVG = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
+const STOP_ICON_SVG = `<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>`;
 
 const USER_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="24" height="20"><ellipse cx="60" cy="68" rx="38" ry="28" fill="#7b9fff"/><ellipse cx="72" cy="72" rx="18" ry="12" fill="#5a7de0" transform="rotate(-10 72 72)"/><ellipse cx="42" cy="50" rx="13" ry="16" fill="#7b9fff"/><circle cx="36" cy="36" r="18" fill="#7b9fff"/><circle cx="30" cy="31" r="4" fill="white"/><circle cx="29" cy="31" r="2" fill="#1a1a2e"/><ellipse cx="18" cy="37" rx="10" ry="5" fill="#ff9a3c" transform="rotate(-10 18 37)"/></svg>`;
 const ASSISTANT_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="24" height="20"><ellipse cx="60" cy="68" rx="38" ry="28" fill="#0a0a0a"/><ellipse cx="42" cy="50" rx="13" ry="16" fill="#0a0a0a"/><circle cx="36" cy="36" r="18" fill="#0a0a0a"/><circle cx="30" cy="31" r="4" fill="white"/><circle cx="29" cy="31" r="2" fill="#333"/><ellipse cx="18" cy="37" rx="10" ry="5" fill="#0a0a0a" opacity="0.7" transform="rotate(-10 18 37)"/></svg>`;
@@ -18,6 +22,22 @@ if (window.marked && window.hljs) {
         gfm: true,
         breaks: true,
     });
+}
+
+function setSendMode() {
+    sendBtn.innerHTML = SEND_ICON_SVG;
+    sendBtn.onclick = sendMessage;
+    sendBtn.disabled = false;
+    sendBtn.classList.remove('stop');
+    sendBtn.setAttribute('aria-label', 'Send message');
+}
+
+function setStopMode() {
+    sendBtn.innerHTML = STOP_ICON_SVG;
+    sendBtn.onclick = cancelMessage;
+    sendBtn.disabled = false;
+    sendBtn.classList.add('stop');
+    sendBtn.setAttribute('aria-label', 'Stop response');
 }
 
 async function copyToClipboard(text, buttonElement) {
@@ -306,6 +326,19 @@ async function streamAssistantResponse(response) {
     }
 }
 
+async function cancelMessage() {
+    const requestId = currentRequestId;
+    if (!requestId) {
+        return;
+    }
+    currentRequestId = null;
+    try {
+        await fetch(`/api/chat/${requestId}/cancel`, { method: 'POST' });
+    } catch {
+        // ignore cancel errors — the stream will end naturally
+    }
+}
+
 async function sendMessage() {
     const text = messageInput.value.trim();
     if (!text || isStreaming) {
@@ -336,7 +369,9 @@ async function sendMessage() {
         }
 
         updateSessionBadge(response.headers.get('X-Session-Id'));
+        currentRequestId = response.headers.get('X-Request-Id');
         removeTypingIndicator();
+        setStopMode();
         await streamAssistantResponse(response);
         await loadSessions();
     } catch (error) {
@@ -344,8 +379,9 @@ async function sendMessage() {
         addMessage('assistant', `Quack! ${error?.message || 'Something went wrong.'}`);
     }
 
+    currentRequestId = null;
     isStreaming = false;
-    sendBtn.disabled = false;
+    setSendMode();
     messageInput.focus();
 }
 
@@ -381,5 +417,6 @@ async function initializeApp() {
 
 window.newSession = newSession;
 window.sendMessage = sendMessage;
+window.cancelMessage = cancelMessage;
 
 initializeApp();
