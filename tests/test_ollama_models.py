@@ -19,7 +19,6 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
             response.raise_for_status()
         except (httpx.HTTPStatusError, httpx.RequestError) as exc:
             pytest.skip(f"Ollama server unavailable: {exc}")
-            return
         models = [
             item["name"]
             for item in response.json().get("models", [])
