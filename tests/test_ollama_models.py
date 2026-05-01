@@ -5,7 +5,6 @@ import os
 
 import httpx
 import pytest
-import pytest_asyncio  # noqa: F401 – ensures asyncio mode is registered
 
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
