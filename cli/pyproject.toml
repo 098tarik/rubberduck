@@ -16,7 +16,5 @@ duck = "duck:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = []
-
 [tool.setuptools.py-modules]
 duck = "duck"

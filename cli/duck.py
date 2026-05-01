@@ -154,15 +154,24 @@ def run_repl(initial_prompt: str | None = None) -> None:
             return
 
         # Regular message
-        ts = datetime.now(timezone.utc).isoformat()
-        history.append({"role": "user", "content": stripped, "timestamp": ts})
+        history.append(
+            {
+                "role": "user",
+                "content": stripped,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
         print(f"\n🦆  ", end="", flush=True)
         reply = stream_chat(history, model)
         print()
 
         history.append(
-            {"role": "assistant", "content": reply, "timestamp": ts}
+            {
+                "role": "assistant",
+                "content": reply,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
         )
         save_session(session_id, history)
 
