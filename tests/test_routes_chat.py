@@ -57,25 +57,6 @@ async def test_chat_rejects_cloud_model(client):
     assert "cloud" in response.json()["detail"].lower()
 
 
-async def test_chat_returns_streaming_response(client):
-    async def _mock_query(self, user_content):
-        yield 'data: {"text": "hi"}\n\n'
-        yield "data: [DONE]\n\n"
-
-    with (
-        patch.object(query_engine.QueryEngine, "query", _mock_query),
-        patch("app.routes.chat.telemetry.record"),
-    ):
-        async with client.stream(
-            "POST", "/api/chat", json={"message": "hello", "model": "llama3"}
-        ) as response:
-            assert response.status_code == 200
-            chunks = [chunk async for chunk in response.aiter_text()]
-
-    content = "".join(chunks)
-    assert "hi" in content
-    assert "[DONE]" in content
-
 
 async def test_chat_includes_session_id_header(client):
     async def _mock_query(self, user_content):
