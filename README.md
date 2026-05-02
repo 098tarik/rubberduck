@@ -21,32 +21,40 @@ highlighting.
 Before you start, make sure you have:
 
 - Python 3.11+
-- Ollama installed and running
+- [Ollama](https://ollama.com/download) installed and running
 - At least one Ollama model pulled locally
 
-Example:
+## Run locally
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/098tarik/rubberduck.git
+cd rubberduck
+```
+
+2. Install and start Ollama, then pull a model:
 
 ```bash
 ollama pull deepseek-r1:8b
 ```
 
-## Run locally
+Any model from the [Ollama library](https://ollama.com/library) works. Smaller
+models (≤ 8 B parameters) respond faster on consumer hardware.
 
-1. Install Python dependencies:
+3. Install Python dependencies:
 
 ```bash
-python3 -m pip install -r requirements.txt
+pip install .
 ```
 
-2. Make sure Ollama is running.
-
-3. Start the app:
+4. Start the app:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-4. Open the app in your browser:
+5. Open the app in your browser:
 
 ```text
 http://localhost:8000
