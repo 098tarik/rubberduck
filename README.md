@@ -5,6 +5,9 @@ It gives you a simple web interface where you can ask questions, keep chat
 history, switch models, render Markdown, and view code blocks with syntax
 highlighting.
 
+# Rubberduck Web Service
+<img width="1035" height="822" alt="image" src="https://github.com/user-attachments/assets/4c25d3b6-608b-44f7-bad2-25e6dd411067" />
+
 # Rubberduck CLI
 <img width="1011" height="383" alt="image" src="https://github.com/user-attachments/assets/3716a054-98e4-40ba-94b6-e8327cf83e49" />
 
