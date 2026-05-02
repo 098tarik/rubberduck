@@ -170,6 +170,28 @@ async def test_chat_records_telemetry_on_start(client):
     assert "chat_started" in events
 
 
+async def test_chat_records_resolved_model_on_completion(client):
+    async def _mock_query(self, user_content):
+        self.model = "qwen2.5:0.5b"
+        yield "data: [DONE]\n\n"
+
+    with (
+        patch.object(query_engine.QueryEngine, "query", _mock_query),
+        patch("app.routes.chat.telemetry.record") as mock_record,
+    ):
+        async with client.stream(
+            "POST", "/api/chat", json={"message": "hello", "model": "phi3:mini"}
+        ) as response:
+            async for _ in response.aiter_bytes():
+                pass
+
+    completed_call = next(
+        call for call in mock_record.call_args_list if call.args[0] == "chat_completed"
+    )
+    assert completed_call.kwargs["requested_model"] == "phi3:mini"
+    assert completed_call.kwargs["model"] == "qwen2.5:0.5b"
+
+
 async def test_chat_records_telemetry_error_for_cloud_model(client):
     with patch("app.routes.chat.telemetry.record") as mock_record:
         await client.post(

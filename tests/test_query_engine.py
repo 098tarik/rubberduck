@@ -60,6 +60,43 @@ def test_parse_stream_line_missing_message_key():
     assert frame is None
 
 
+def test_status_frame_contains_phase_and_label():
+    frame = QueryEngine._status_frame("waiting")
+    payload = json.loads(frame.removeprefix("data: ").removesuffix("\n\n"))
+    assert payload == {
+        "status": {
+            "phase": "waiting",
+            "label": "Waiting for first token...",
+        }
+    }
+
+
+def test_status_frame_can_include_resolved_model():
+    frame = QueryEngine._status_frame(
+        "preparing",
+        label="Switching to qwen2.5:0.5b to fit memory...",
+        model="qwen2.5:0.5b",
+    )
+    payload = json.loads(frame.removeprefix("data: ").removesuffix("\n\n"))
+    assert payload["status"]["model"] == "qwen2.5:0.5b"
+
+
+def test_local_models_from_payload_filters_and_sorts():
+    payload = {
+        "models": [
+            {"name": "phi3:mini", "size": 200},
+            {"name": "gpt-4:cloud", "size": 1},
+            {"name": "qwen2.5:0.5b", "size": 100},
+            {"name": "", "size": 50},
+        ]
+    }
+
+    assert QueryEngine._local_models_from_payload(payload) == [
+        {"name": "qwen2.5:0.5b", "size": 100},
+        {"name": "phi3:mini", "size": 200},
+    ]
+
+
 # ---------------------------------------------------------------------------
 # _build_ollama_messages
 # ---------------------------------------------------------------------------
@@ -147,9 +184,14 @@ async def test_query_yields_text_frames():
         engine = QueryEngine("sess-q1")
         frames = [f async for f in engine.query("hi")]
 
-    text_frames = [f for f in frames if "[DONE]" not in f]
+    text_frames = [f for f in frames if '"text":' in f]
+    status_frames = [f for f in frames if '"status":' in f]
     done_frames = [f for f in frames if "[DONE]" in f]
     assert len(text_frames) == 1
+    assert [
+        json.loads(frame.removeprefix("data: ").removesuffix("\n\n"))["status"]["phase"]
+        for frame in status_frames
+    ] == ["preparing", "connecting", "waiting", "responding"]
     payload = json.loads(text_frames[0].removeprefix("data: ").removesuffix("\n\n"))
     assert payload["text"] == "Hello"
     assert len(done_frames) == 1
@@ -184,9 +226,57 @@ async def test_query_yields_error_frame_on_http_error():
         engine = QueryEngine("sess-q3")
         frames = [f async for f in engine.query("hello")]
 
-    assert len(frames) == 1
-    payload = json.loads(frames[0].removeprefix("data: ").removesuffix("\n\n"))
+    payload = json.loads(frames[-1].removeprefix("data: ").removesuffix("\n\n"))
     assert "error" in payload
+
+
+async def test_query_retries_with_smaller_model_on_memory_error():
+    oom_response = MagicMock()
+    oom_response.is_error = True
+    oom_response.text = json.dumps({"error": "model requires more system memory (3.5 GiB) than is available (3.1 GiB)"})
+    oom_response.aread = AsyncMock(return_value=b"")
+    oom_response.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError("oom", request=MagicMock(), response=oom_response))
+    oom_response.__aenter__ = AsyncMock(return_value=oom_response)
+    oom_response.__aexit__ = AsyncMock(return_value=None)
+
+    ok_response = MagicMock()
+    ok_response.is_error = False
+    ok_response.raise_for_status = MagicMock()
+
+    async def _aiter_lines():
+        yield json.dumps({"message": {"content": "Olympia"}, "done": False})
+        yield json.dumps({"done": True})
+
+    ok_response.aiter_lines = _aiter_lines
+    ok_response.__aenter__ = AsyncMock(return_value=ok_response)
+    ok_response.__aexit__ = AsyncMock(return_value=None)
+
+    tags_response = MagicMock()
+    tags_response.raise_for_status = MagicMock()
+    tags_response.json.return_value = {
+        "models": [
+            {"name": "qwen2.5:0.5b", "size": 100},
+            {"name": "phi3:mini", "size": 200},
+        ]
+    }
+
+    mock_client = MagicMock()
+    mock_client.stream = MagicMock(side_effect=[oom_response, ok_response])
+    mock_client.get = AsyncMock(return_value=tags_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("app.query_engine.httpx.AsyncClient", return_value=mock_client):
+        engine = QueryEngine("sess-q5", model="phi3:mini")
+        frames = [f async for f in engine.query("hello")]
+
+    status_payloads = [
+        json.loads(frame.removeprefix("data: ").removesuffix("\n\n"))["status"]
+        for frame in frames
+        if '"status":' in frame
+    ]
+    assert any(payload.get("model") == "qwen2.5:0.5b" for payload in status_payloads)
+    assert engine.model == "qwen2.5:0.5b"
 
 
 async def test_query_user_message_prepended_to_history():

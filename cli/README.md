@@ -53,7 +53,8 @@ duck "what is the airspeed velocity of an unladen swallow?"
 | Command | Description |
 |---------|-------------|
 | `/new` | Start a new session (clears history) |
-| `/model <name>` | Switch to a different Ollama model |
+| `/model` | Open an in-terminal model picker with arrow-key selection |
+| `/model <name>` | Switch directly to a different Ollama model |
 | `/history` | Print all messages in the current session |
 | `/help` | Show command list |
 | `/quit` | Exit |
