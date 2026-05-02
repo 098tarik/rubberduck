@@ -67,9 +67,20 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
         try:
             async for chunk in engine.query(request.message, abort_event):
                 yield chunk
-            telemetry.record("chat_completed", session_id=session_id, model=model)
+            telemetry.record(
+                "chat_completed",
+                session_id=session_id,
+                requested_model=model,
+                model=engine.model,
+            )
         except Exception:
-            telemetry.record("chat_error", session_id=session_id, model=model, reason="unexpected_error")
+            telemetry.record(
+                "chat_error",
+                session_id=session_id,
+                requested_model=model,
+                model=engine.model,
+                reason="unexpected_error",
+            )
             yield f"data: {json.dumps({'error': 'An unexpected error occurred.'})}\n\n"
         finally:
             abort.cleanup_abort_controller(request_id)

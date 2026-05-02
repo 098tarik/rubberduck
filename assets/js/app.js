@@ -5,11 +5,13 @@ const welcome = document.getElementById('welcome');
 const modelSelect = document.getElementById('modelSelect');
 const sessionSelect = document.getElementById('sessionSelect');
 const sessionBadge = document.getElementById('sessionIdBadge');
+const modelNotice = document.getElementById('modelNotice');
 
 let sessionId = null;
 let isStreaming = false;
 let currentRequestId = null;
 let currentAbortController = null;
+let activeStreamToken = 0;
 
 const SEND_ICON_SVG = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
 const STOP_ICON_SVG = `<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>`;
@@ -17,6 +19,7 @@ const STOP_ICON_SVG = `<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" hei
 const USER_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="24" height="20"><ellipse cx="60" cy="68" rx="38" ry="28" fill="#7b9fff"/><ellipse cx="72" cy="72" rx="18" ry="12" fill="#5a7de0" transform="rotate(-10 72 72)"/><ellipse cx="42" cy="50" rx="13" ry="16" fill="#7b9fff"/><circle cx="36" cy="36" r="18" fill="#7b9fff"/><circle cx="30" cy="31" r="4" fill="white"/><circle cx="29" cy="31" r="2" fill="#1a1a2e"/><ellipse cx="18" cy="37" rx="10" ry="5" fill="#ff9a3c" transform="rotate(-10 18 37)"/></svg>`;
 const ASSISTANT_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="24" height="20"><ellipse cx="60" cy="68" rx="38" ry="28" fill="#0a0a0a"/><ellipse cx="42" cy="50" rx="13" ry="16" fill="#0a0a0a"/><circle cx="36" cy="36" r="18" fill="#0a0a0a"/><circle cx="30" cy="31" r="4" fill="white"/><circle cx="29" cy="31" r="2" fill="#333"/><ellipse cx="18" cy="37" rx="10" ry="5" fill="#0a0a0a" opacity="0.7" transform="rotate(-10 18 37)"/></svg>`;
 const TYPING_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="24" height="20"><ellipse cx="60" cy="68" rx="38" ry="28" fill="#0a0a0a"/><circle cx="36" cy="36" r="18" fill="#0a0a0a"/><circle cx="30" cy="31" r="4" fill="white"/></svg>`;
+const DEFAULT_TYPING_STATUS = 'Preparing context...';
 
 if (window.marked && window.hljs) {
     marked.setOptions({
@@ -39,6 +42,15 @@ function setStopMode() {
     sendBtn.disabled = false;
     sendBtn.classList.add('stop');
     sendBtn.setAttribute('aria-label', 'Stop response');
+}
+
+function releaseStreamingUI() {
+    removeTypingIndicator();
+    currentAbortController = null;
+    currentRequestId = null;
+    isStreaming = false;
+    setSendMode();
+    messageInput.focus();
 }
 
 async function copyToClipboard(text, buttonElement) {
@@ -240,7 +252,7 @@ function addMessage(role, content) {
     return contentElement;
 }
 
-function addTypingIndicator() {
+function addTypingIndicator(statusText = DEFAULT_TYPING_STATUS) {
     const messageElement = document.createElement('div');
     messageElement.className = 'message assistant';
     messageElement.id = 'typing';
@@ -252,17 +264,61 @@ function addTypingIndicator() {
     const contentElement = document.createElement('div');
     contentElement.className = 'message-content';
     contentElement.innerHTML = (
-        '<div class="typing-indicator"><span></span><span></span><span></span></div>'
+        '<div class="typing-shell">'
+        + '<div class="typing-indicator"><span></span><span></span><span></span></div>'
+        + `<div class="typing-status"></div>`
+        + '</div>'
     );
 
     messageElement.appendChild(avatarElement);
     messageElement.appendChild(contentElement);
     chatContainer.appendChild(messageElement);
+    setTypingIndicatorStatus(statusText);
     scrollChatToBottom();
 }
 
 function removeTypingIndicator() {
     document.getElementById('typing')?.remove();
+}
+
+function setTypingIndicatorStatus(statusText) {
+    const statusElement = document.querySelector('#typing .typing-status');
+    if (!statusElement) {
+        return;
+    }
+
+    statusElement.textContent = statusText || DEFAULT_TYPING_STATUS;
+}
+
+function clearModelNotice() {
+    if (!modelNotice) {
+        return;
+    }
+
+    modelNotice.hidden = true;
+    modelNotice.innerHTML = '';
+}
+
+function showModelNotice(messageHtml) {
+    if (!modelNotice) {
+        return;
+    }
+
+    modelNotice.innerHTML = messageHtml;
+    modelNotice.hidden = false;
+}
+
+function updateSelectedModel(modelName) {
+    if (!modelName || !modelSelect) {
+        return;
+    }
+
+    const existingOption = Array.from(modelSelect.options).find((option) => option.value === modelName);
+    if (!existingOption) {
+        return;
+    }
+
+    modelSelect.value = modelName;
 }
 
 function updateSessionBadge(serverSessionId) {
@@ -275,13 +331,24 @@ function updateSessionBadge(serverSessionId) {
 }
 
 async function streamAssistantResponse(response) {
-    const contentDiv = addMessage('assistant', '');
-    const copyButtonElement = contentDiv.parentElement.querySelector('.message-copy-btn');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let fullText = '';
     let shouldStop = false;
+    let contentDiv = null;
+    let copyButtonElement = null;
+
+    function ensureAssistantMessage() {
+        if (contentDiv) {
+            return contentDiv;
+        }
+
+        removeTypingIndicator();
+        contentDiv = addMessage('assistant', '');
+        copyButtonElement = contentDiv.parentElement.querySelector('.message-copy-btn');
+        return contentDiv;
+    }
 
     while (!shouldStop) {
         const { done, value } = await reader.read();
@@ -312,35 +379,55 @@ async function streamAssistantResponse(response) {
                 continue;
             }
 
-            if (parsedPayload.text) {
+            if (parsedPayload.status?.label) {
+                updateSelectedModel(parsedPayload.status.model);
+                if (
+                    parsedPayload.status.reason === 'memory'
+                    && parsedPayload.status.requested_model
+                    && parsedPayload.status.model
+                    && parsedPayload.status.requested_model !== parsedPayload.status.model
+                ) {
+                    showModelNotice(
+                        `Selected model <strong>${parsedPayload.status.requested_model}</strong> did not fit in available memory, so RubberDuck used <strong>${parsedPayload.status.model}</strong> for this response.`
+                    );
+                }
+                setTypingIndicatorStatus(parsedPayload.status.label);
+                scrollChatToBottom();
+            } else if (parsedPayload.text) {
+                const assistantContent = ensureAssistantMessage();
                 fullText += parsedPayload.text;
-                renderAssistantContent(contentDiv, fullText);
+                renderAssistantContent(assistantContent, fullText);
                 copyButtonElement.dataset.copyText = fullText;
                 scrollChatToBottom();
             } else if (parsedPayload.error) {
-                contentDiv.textContent = `Error: ${parsedPayload.error}`;
-                copyButtonElement.dataset.copyText = contentDiv.textContent;
+                const assistantContent = ensureAssistantMessage();
+                assistantContent.textContent = `Quack! ${parsedPayload.error}`;
+                copyButtonElement.dataset.copyText = assistantContent.textContent;
                 shouldStop = true;
                 break;
             }
         }
     }
+
+    if (!contentDiv) {
+        removeTypingIndicator();
+    }
 }
 
 async function cancelMessage() {
-    if (currentAbortController) {
-        currentAbortController.abort();
-        currentAbortController = null;
-    }
+    const abortController = currentAbortController;
     const requestId = currentRequestId;
-    if (!requestId) {
-        return;
+    activeStreamToken += 1;
+    releaseStreamingUI();
+
+    if (abortController) {
+        abortController.abort();
     }
-    currentRequestId = null;
-    try {
-        await fetch(`/api/chat/${requestId}/cancel`, { method: 'POST' });
-    } catch {
-        // ignore cancel errors — the stream will end naturally
+
+    if (requestId) {
+        fetch(`/api/chat/${requestId}/cancel`, { method: 'POST' }).catch(() => {
+            // ignore cancel errors — the stream will end naturally
+        });
     }
 }
 
@@ -353,11 +440,13 @@ async function sendMessage() {
     isStreaming = true;
     messageInput.value = '';
     messageInput.style.height = 'auto';
+    clearModelNotice();
 
     addMessage('user', text);
     addTypingIndicator();
     setStopMode();
 
+    const streamToken = ++activeStreamToken;
     currentAbortController = new AbortController();
 
     try {
@@ -380,7 +469,6 @@ async function sendMessage() {
 
         updateSessionBadge(response.headers.get('X-Session-Id'));
         currentRequestId = response.headers.get('X-Request-Id');
-        removeTypingIndicator();
         await streamAssistantResponse(response);
         await loadSessions();
     } catch (error) {
@@ -390,11 +478,9 @@ async function sendMessage() {
         }
     }
 
-    currentAbortController = null;
-    currentRequestId = null;
-    isStreaming = false;
-    setSendMode();
-    messageInput.focus();
+    if (streamToken === activeStreamToken) {
+        releaseStreamingUI();
+    }
 }
 
 function registerEventListeners() {

@@ -58,7 +58,7 @@ async def test_chat_rejects_cloud_model(client):
 
 
 async def test_chat_returns_streaming_response(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield 'data: {"text": "hi"}\n\n'
         yield "data: [DONE]\n\n"
 
@@ -78,7 +78,7 @@ async def test_chat_returns_streaming_response(client):
 
 
 async def test_chat_includes_session_id_header(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -97,7 +97,7 @@ async def test_chat_includes_session_id_header(client):
 
 
 async def test_chat_uses_provided_session_id(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -117,7 +117,7 @@ async def test_chat_uses_provided_session_id(client):
 
 
 async def test_chat_generates_new_session_id_when_omitted(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -135,7 +135,7 @@ async def test_chat_generates_new_session_id_when_omitted(client):
 
 
 async def test_chat_cache_control_header(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -153,7 +153,7 @@ async def test_chat_cache_control_header(client):
 
 
 async def test_chat_records_telemetry_on_start(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -168,6 +168,28 @@ async def test_chat_records_telemetry_on_start(client):
 
     events = [call.args[0] for call in mock_record.call_args_list]
     assert "chat_started" in events
+
+
+async def test_chat_records_resolved_model_on_completion(client):
+    async def _mock_query(self, user_content, abort_event=None):
+        self.model = "qwen2.5:0.5b"
+        yield "data: [DONE]\n\n"
+
+    with (
+        patch.object(query_engine.QueryEngine, "query", _mock_query),
+        patch("app.routes.chat.telemetry.record") as mock_record,
+    ):
+        async with client.stream(
+            "POST", "/api/chat", json={"message": "hello", "model": "phi3:mini"}
+        ) as response:
+            async for _ in response.aiter_bytes():
+                pass
+
+    completed_call = next(
+        call for call in mock_record.call_args_list if call.args[0] == "chat_completed"
+    )
+    assert completed_call.kwargs["requested_model"] == "phi3:mini"
+    assert completed_call.kwargs["model"] == "qwen2.5:0.5b"
 
 
 async def test_chat_records_telemetry_error_for_cloud_model(client):

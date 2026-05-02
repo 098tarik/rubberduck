@@ -1,1 +1,5 @@
 {"timestamp": "2026-05-01T21:09:24.457801+00:00", "event": "chat_error", "session_id": "e34196cc-11be-42f4-92b6-9f3e605b2786", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
+{"timestamp": "2026-05-02T01:30:53.960190+00:00", "event": "chat_error", "session_id": "e5b539bf-1d7b-4dc9-b448-662f5d384c91", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
+{"timestamp": "2026-05-02T01:37:10.303594+00:00", "event": "chat_error", "session_id": "5e563ca6-9778-4b5a-9ce6-e0d8d7d8e475", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
+{"timestamp": "2026-05-02T01:42:24.015689+00:00", "event": "chat_error", "session_id": "d9a2a959-d1e1-4a2e-a861-a3ee4bed28bd", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
+{"timestamp": "2026-05-02T01:42:52.287089+00:00", "event": "chat_error", "session_id": "661811ae-69ce-4e88-a3a5-51a3444a6b1c", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
