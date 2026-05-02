@@ -12,6 +12,8 @@ let isStreaming = false;
 let currentRequestId = null;
 let currentAbortController = null;
 let activeStreamToken = 0;
+let progressBarTimer = null;
+let progressValue = 0;
 
 const SEND_ICON_SVG = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
 const STOP_ICON_SVG = `<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>`;
@@ -265,8 +267,8 @@ function addTypingIndicator(statusText = DEFAULT_TYPING_STATUS) {
     contentElement.className = 'message-content';
     contentElement.innerHTML = (
         '<div class="typing-shell">'
-        + '<div class="typing-indicator"><span></span><span></span><span></span></div>'
-        + `<div class="typing-status"></div>`
+        + '<div class="typing-status"></div>'
+        + '<div class="progress-bar-track"><div class="progress-bar-fill" id="progressBarFill"></div></div>'
         + '</div>'
     );
 
@@ -277,7 +279,39 @@ function addTypingIndicator(statusText = DEFAULT_TYPING_STATUS) {
     scrollChatToBottom();
 }
 
+function startProgressBar() {
+    progressValue = 0;
+    clearInterval(progressBarTimer);
+    const fill = document.getElementById('progressBarFill');
+    if (fill) {
+        fill.style.width = '0%';
+    }
+    progressBarTimer = setInterval(() => {
+        // Eased fake progress: asymptotically approaches 88% — never completes on its own
+        progressValue += (0.88 - progressValue) * 0.04;
+        const fill = document.getElementById('progressBarFill');
+        if (fill) {
+            fill.style.width = `${progressValue * 100}%`;
+        }
+    }, 80);
+}
+
+function completeProgressBar(callback) {
+    clearInterval(progressBarTimer);
+    progressBarTimer = null;
+    const fill = document.getElementById('progressBarFill');
+    if (!fill) {
+        callback();
+        return;
+    }
+    fill.classList.add('complete');
+    fill.style.width = '100%';
+    setTimeout(callback, 380);
+}
+
 function removeTypingIndicator() {
+    clearInterval(progressBarTimer);
+    progressBarTimer = null;
     document.getElementById('typing')?.remove();
 }
 
@@ -335,20 +369,10 @@ async function streamAssistantResponse(response) {
     const decoder = new TextDecoder();
     let buffer = '';
     let fullText = '';
+    let errorText = null;
     let shouldStop = false;
-    let contentDiv = null;
-    let copyButtonElement = null;
 
-    function ensureAssistantMessage() {
-        if (contentDiv) {
-            return contentDiv;
-        }
-
-        removeTypingIndicator();
-        contentDiv = addMessage('assistant', '');
-        copyButtonElement = contentDiv.parentElement.querySelector('.message-copy-btn');
-        return contentDiv;
-    }
+    startProgressBar();
 
     while (!shouldStop) {
         const { done, value } = await reader.read();
@@ -394,24 +418,25 @@ async function streamAssistantResponse(response) {
                 setTypingIndicatorStatus(parsedPayload.status.label);
                 scrollChatToBottom();
             } else if (parsedPayload.text) {
-                const assistantContent = ensureAssistantMessage();
+                // Buffer text — do not render incrementally
                 fullText += parsedPayload.text;
-                renderAssistantContent(assistantContent, fullText);
-                copyButtonElement.dataset.copyText = fullText;
-                scrollChatToBottom();
             } else if (parsedPayload.error) {
-                const assistantContent = ensureAssistantMessage();
-                assistantContent.textContent = `Quack! ${parsedPayload.error}`;
-                copyButtonElement.dataset.copyText = assistantContent.textContent;
+                errorText = parsedPayload.error;
                 shouldStop = true;
                 break;
             }
         }
     }
 
-    if (!contentDiv) {
+    // Fill bar to 100% quickly, then reveal the full message at once
+    completeProgressBar(() => {
         removeTypingIndicator();
-    }
+        if (errorText) {
+            addMessage('assistant', `Quack! ${errorText}`);
+        } else if (fullText) {
+            addMessage('assistant', fullText);
+        }
+    });
 }
 
 async function cancelMessage() {

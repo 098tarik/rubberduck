@@ -269,24 +269,8 @@ html, body {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+    width: 100%;
 }
-
-.typing-indicator {
-    display: flex;
-    gap: 4px;
-    padding-top: 4px;
-}
-
-.typing-indicator span {
-    width: 6px;
-    height: 6px;
-    background: var(--accent);
-    border-radius: 50%;
-    animation: bounce 1.2s ease-in-out infinite;
-}
-
-.typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
-.typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
 
 .typing-status {
     font-size: 0.78rem;
@@ -294,9 +278,26 @@ html, body {
     letter-spacing: 0.02em;
 }
 
-@keyframes bounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-    30% { transform: translateY(-6px); opacity: 1; }
+.progress-bar-track {
+    width: 100%;
+    min-width: 180px;
+    height: 3px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent) 0%, rgba(245,197,24,0.6) 100%);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--accent-glow);
+    transition: width 0.3s ease;
+}
+
+.progress-bar-fill.complete {
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .input-area {
