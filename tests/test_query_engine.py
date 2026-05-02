@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 import app.config as config
@@ -160,6 +161,7 @@ def _make_mock_stream(lines):
             yield line
 
     mock_response = MagicMock()
+    mock_response.is_error = False
     mock_response.raise_for_status = MagicMock()
     mock_response.aiter_lines = _aiter_lines
     mock_response.__aenter__ = AsyncMock(return_value=mock_response)
@@ -216,8 +218,6 @@ async def test_query_appends_assistant_message_after_stream():
 
 
 async def test_query_yields_error_frame_on_http_error():
-    import httpx
-
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(side_effect=httpx.HTTPError("connection failed"))
     mock_client.__aexit__ = AsyncMock(return_value=None)
