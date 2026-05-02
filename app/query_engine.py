@@ -6,7 +6,7 @@ import json
 
 import httpx
 
-from app import config, context, history, messages
+from app import abort, config, context, history, messages
 
 
 STREAM_STATUS_LABELS = {
@@ -171,6 +171,9 @@ class QueryEngine:
                         },
                         timeout=120.0,
                     ) as response:
+                        if isinstance(abort_event, abort.AbortController):
+                            abort_event.add_callback(response.aclose)
+
                         if response.is_error:
                             await response.aread()
                             error_text = self._extract_error_message(response)
