@@ -99,6 +99,10 @@ Then open:
 http://localhost:8000
 ```
 
+## CLI
+
+A terminal chat client is also available. See [cli/README.md](cli/README.md) for installation and usage instructions.
+
 ## Project structure
 
 - [main.py](main.py) - app entry point
@@ -107,6 +111,7 @@ http://localhost:8000
 - [index.html](index.html) - main web page
 - [requirements.txt](requirements.txt) - Python dependencies
 - [ci](ci) - container and deployment files
+- [cli](cli) - terminal chat client
 
 ## Deploy from GitHub
 
