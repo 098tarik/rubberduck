@@ -58,7 +58,7 @@ async def test_chat_rejects_cloud_model(client):
 
 
 async def test_chat_returns_streaming_response(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield 'data: {"text": "hi"}\n\n'
         yield "data: [DONE]\n\n"
 
@@ -78,7 +78,7 @@ async def test_chat_returns_streaming_response(client):
 
 
 async def test_chat_includes_session_id_header(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -97,7 +97,7 @@ async def test_chat_includes_session_id_header(client):
 
 
 async def test_chat_uses_provided_session_id(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -117,7 +117,7 @@ async def test_chat_uses_provided_session_id(client):
 
 
 async def test_chat_generates_new_session_id_when_omitted(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -135,7 +135,7 @@ async def test_chat_generates_new_session_id_when_omitted(client):
 
 
 async def test_chat_cache_control_header(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -153,7 +153,7 @@ async def test_chat_cache_control_header(client):
 
 
 async def test_chat_records_telemetry_on_start(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
@@ -171,7 +171,7 @@ async def test_chat_records_telemetry_on_start(client):
 
 
 async def test_chat_records_resolved_model_on_completion(client):
-    async def _mock_query(self, user_content):
+    async def _mock_query(self, user_content, abort_event=None):
         self.model = "qwen2.5:0.5b"
         yield "data: [DONE]\n\n"
 
