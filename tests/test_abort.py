@@ -47,6 +47,21 @@ def test_request_abort_returns_false_for_unknown():
     assert result is False
 
 
+def test_request_abort_runs_registered_async_callback():
+    event = abort_module.create_abort_controller("req-async")
+    callbacks: list[str] = []
+
+    async def _cleanup():
+        callbacks.append("called")
+
+    event.add_callback(_cleanup)
+
+    result = abort_module.request_abort("req-async")
+
+    assert result is True
+    assert callbacks == ["called"]
+
+
 def test_cleanup_abort_controller_removes_entry():
     abort_module.create_abort_controller("req-6")
     abort_module.cleanup_abort_controller("req-6")

@@ -291,3 +291,22 @@ async def test_query_user_message_prepended_to_history():
     # First message should be the user message
     assert engine._messages[0]["role"] == "user"
     assert engine._messages[0]["content"] == "my question"
+
+
+async def test_query_abort_closes_active_ollama_stream():
+    lines = [json.dumps({"message": {"content": "ignored"}, "done": False})]
+    mock_client = _make_mock_stream(lines)
+    mock_client.stream.return_value.is_error = False
+    mock_client.stream.return_value.aclose = AsyncMock(return_value=None)
+    abort_event = asyncio.Event()
+    abort_event.__class__ = __import__("app.abort", fromlist=["AbortController"]).AbortController
+    abort_event.add_callback = abort_event.add_callback
+    abort_event.abort()
+
+    with patch("app.query_engine.httpx.AsyncClient", return_value=mock_client):
+        engine = QueryEngine("sess-q6")
+        frames = [f async for f in engine.query("hello", abort_event)]
+
+    done_frames = [f for f in frames if "[DONE]" in f]
+    assert len(done_frames) == 1
+    mock_client.stream.return_value.aclose.assert_awaited_once()
