@@ -372,8 +372,6 @@ async function streamAssistantResponse(response) {
     let errorText = null;
     let shouldStop = false;
 
-    startProgressBar();
-
     while (!shouldStop) {
         const { done, value } = await reader.read();
         if (done) {
@@ -469,6 +467,7 @@ async function sendMessage() {
 
     addMessage('user', text);
     addTypingIndicator();
+    startProgressBar();
     setStopMode();
 
     const streamToken = ++activeStreamToken;
