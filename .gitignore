@@ -10,5 +10,6 @@ build/
 .pytest_cache/
 
 sessions/
+telemetry.jsonl
 
 .DS_Store
