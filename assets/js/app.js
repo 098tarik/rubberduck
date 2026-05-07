@@ -1,6 +1,9 @@
 const chatContainer = document.getElementById('chatContainer');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
+const attachBtn = document.getElementById('attachBtn');
+const contextInput = document.getElementById('contextInput');
+const pendingAttachmentsEl = document.getElementById('pendingAttachments');
 const welcome = document.getElementById('welcome');
 const modelSelect = document.getElementById('modelSelect');
 const sessionSelect = document.getElementById('sessionSelect');
@@ -14,6 +17,7 @@ let currentAbortController = null;
 let activeStreamToken = 0;
 let progressBarTimer = null;
 let progressValue = 0;
+let pendingAttachments = [];
 
 const SEND_ICON_SVG = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
 const STOP_ICON_SVG = `<svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>`;
@@ -22,6 +26,11 @@ const USER_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12
 const ASSISTANT_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="24" height="20"><ellipse cx="60" cy="68" rx="38" ry="28" fill="#0a0a0a"/><ellipse cx="42" cy="50" rx="13" ry="16" fill="#0a0a0a"/><circle cx="36" cy="36" r="18" fill="#0a0a0a"/><circle cx="30" cy="31" r="4" fill="white"/><circle cx="29" cy="31" r="2" fill="#333"/><ellipse cx="18" cy="37" rx="10" ry="5" fill="#0a0a0a" opacity="0.7" transform="rotate(-10 18 37)"/></svg>`;
 const TYPING_AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100" width="24" height="20"><ellipse cx="60" cy="68" rx="38" ry="28" fill="#0a0a0a"/><circle cx="36" cy="36" r="18" fill="#0a0a0a"/><circle cx="30" cy="31" r="4" fill="white"/></svg>`;
 const DEFAULT_TYPING_STATUS = 'Preparing context...';
+const SUPPORTED_TEXT_EXTENSIONS = new Set([
+    'c', 'cfg', 'cpp', 'css', 'csv', 'go', 'h', 'hpp', 'html', 'ini', 'java', 'js',
+    'json', 'log', 'md', 'py', 'rs', 'sh', 'sql', 'toml', 'ts', 'tsx', 'txt',
+    'xml', 'yaml', 'yml',
+]);
 
 if (window.marked && window.hljs) {
     marked.setOptions({
@@ -150,7 +159,7 @@ async function restoreSession(sessionIdToLoad) {
     }
 
     for (const message of payload.messages) {
-        addMessage(message.role, message.content);
+        addMessage(message.role, message.content, message.attachments || []);
     }
 
     sessionId = sessionIdToLoad;
@@ -160,6 +169,7 @@ async function restoreSession(sessionIdToLoad) {
 function newSession() {
     sessionId = null;
     chatContainer.innerHTML = '';
+    clearPendingAttachments();
     if (welcome) {
         welcome.style.display = '';
     }
@@ -173,6 +183,93 @@ function autoResizeMessageInput() {
 
 function scrollChatToBottom() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function fileExtension(fileName) {
+    return fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+}
+
+function isImageFile(file) {
+    return file.type.startsWith('image/');
+}
+
+function isTextFile(file) {
+    return file.type.startsWith('text/')
+        || SUPPORTED_TEXT_EXTENSIONS.has(fileExtension(file.name));
+}
+
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error(`Failed to read ${file.name}.`));
+        reader.readAsText(file);
+    });
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error(`Failed to read ${file.name}.`));
+        reader.readAsDataURL(file);
+    });
+}
+
+function attachmentSummary(attachment) {
+    const kindLabel = attachment.kind === 'image' ? 'image' : 'file';
+    return `${attachment.name} · ${kindLabel}`;
+}
+
+function renderPendingAttachments() {
+    if (!pendingAttachmentsEl) {
+        return;
+    }
+
+    pendingAttachmentsEl.innerHTML = '';
+    pendingAttachmentsEl.hidden = pendingAttachments.length === 0;
+
+    pendingAttachments.forEach((attachment, index) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'attachment-chip';
+        chip.innerHTML = (
+            `<span>${attachmentSummary(attachment)}</span>`
+            + `<span class="attachment-chip-remove" aria-hidden="true">×</span>`
+        );
+        chip.setAttribute('aria-label', `Remove ${attachment.name}`);
+        chip.addEventListener('click', () => {
+            pendingAttachments.splice(index, 1);
+            renderPendingAttachments();
+        });
+        pendingAttachmentsEl.appendChild(chip);
+    });
+}
+
+function clearPendingAttachments() {
+    pendingAttachments = [];
+    if (contextInput) {
+        contextInput.value = '';
+    }
+    renderPendingAttachments();
+}
+
+function createAttachmentList(attachments) {
+    if (!attachments.length) {
+        return null;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'message-attachments';
+
+    attachments.forEach((attachment) => {
+        const item = document.createElement('div');
+        item.className = 'message-attachment';
+        item.textContent = attachmentSummary(attachment);
+        list.appendChild(item);
+    });
+
+    return list;
 }
 
 function createAvatarMarkup(role) {
@@ -210,7 +307,7 @@ function renderAssistantContent(contentDiv, content) {
     highlightCodeBlocks(contentDiv);
 }
 
-function addMessage(role, content) {
+function addMessage(role, content, attachments = []) {
     if (welcome) {
         welcome.style.display = 'none';
     }
@@ -232,7 +329,8 @@ function addMessage(role, content) {
     copyButtonElement.className = 'message-copy-btn';
     copyButtonElement.type = 'button';
     copyButtonElement.textContent = 'Copy';
-    copyButtonElement.dataset.copyText = content;
+    copyButtonElement.dataset.copyText = content
+        || attachments.map((attachment) => attachmentSummary(attachment)).join('\n');
     copyButtonElement.addEventListener('click', () => {
         copyToClipboard(copyButtonElement.dataset.copyText || '', copyButtonElement);
     });
@@ -240,10 +338,16 @@ function addMessage(role, content) {
     if (role === 'assistant' && content) {
         renderAssistantContent(contentElement, content);
     } else {
-        contentElement.textContent = content;
+        contentElement.textContent = content || (attachments.length ? 'Attached context' : '');
     }
 
     messageStackElement.appendChild(contentElement);
+    if (role === 'user') {
+        const attachmentList = createAttachmentList(attachments);
+        if (attachmentList) {
+            messageStackElement.appendChild(attachmentList);
+        }
+    }
     messageStackElement.appendChild(copyButtonElement);
 
     messageElement.appendChild(avatarElement);
@@ -454,9 +558,49 @@ async function cancelMessage() {
     }
 }
 
+async function handleAttachmentSelection(event) {
+    const selectedFiles = Array.from(event.target.files || []);
+    if (!selectedFiles.length) {
+        return;
+    }
+
+    const nextAttachments = [];
+    for (const file of selectedFiles) {
+        if (isImageFile(file)) {
+            const dataUrl = await readFileAsDataUrl(file);
+            nextAttachments.push({
+                name: file.name,
+                media_type: file.type || 'image/*',
+                kind: 'image',
+                content: dataUrl.split(',')[1] || '',
+            });
+            continue;
+        }
+
+        if (isTextFile(file)) {
+            nextAttachments.push({
+                name: file.name,
+                media_type: file.type || 'text/plain',
+                kind: 'text',
+                content: await readFileAsText(file),
+            });
+            continue;
+        }
+
+        alert(`Unsupported attachment type: ${file.name}`);
+    }
+
+    pendingAttachments = [...pendingAttachments, ...nextAttachments];
+    if (contextInput) {
+        contextInput.value = '';
+    }
+    renderPendingAttachments();
+}
+
 async function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text || isStreaming) {
+    const attachmentsForSend = pendingAttachments.map((attachment) => ({ ...attachment }));
+    if ((!text && !attachmentsForSend.length) || isStreaming) {
         return;
     }
 
@@ -464,8 +608,9 @@ async function sendMessage() {
     messageInput.value = '';
     messageInput.style.height = 'auto';
     clearModelNotice();
+    clearPendingAttachments();
 
-    addMessage('user', text);
+    addMessage('user', text, attachmentsForSend);
     addTypingIndicator();
     startProgressBar();
     setStopMode();
@@ -479,6 +624,7 @@ async function sendMessage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: text,
+                attachments: attachmentsForSend,
                 session_id: sessionId,
                 model: modelSelect.value,
             }),
@@ -530,6 +676,8 @@ function registerEventListeners() {
             sendMessage();
         }
     });
+    attachBtn?.addEventListener('click', () => contextInput?.click());
+    contextInput?.addEventListener('change', handleAttachmentSelection);
 }
 
 async function initializeApp() {
@@ -540,5 +688,6 @@ async function initializeApp() {
 window.newSession = newSession;
 window.sendMessage = sendMessage;
 window.cancelMessage = cancelMessage;
+window.selectContextFiles = () => contextInput?.click();
 
 initializeApp();

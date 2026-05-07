@@ -7,7 +7,7 @@ import fastapi
 import fastapi.responses
 import pydantic
 
-from app import abort, config, query_engine, telemetry
+from app import abort, config, messages, query_engine, telemetry
 
 router = fastapi.APIRouter()
 
@@ -17,7 +17,15 @@ class ChatRequest(pydantic.BaseModel):
 
     session_id: str | None = None
     model: str | None = None
-    message: str
+    message: str = ""
+    attachments: list[messages.Attachment] = pydantic.Field(default_factory=list)
+
+    @pydantic.model_validator(mode="after")
+    def validate_prompt_input(self) -> "ChatRequest":
+        """Require either message text or at least one attachment."""
+        if self.message.strip() or self.attachments:
+            return self
+        raise ValueError("Please provide a message or at least one attachment.")
 
 
 def _is_cloud_model(model: str) -> bool:
@@ -43,6 +51,7 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
     session_id = request.session_id or str(uuid.uuid4())
     request_id = str(uuid.uuid4())
     model = request.model or config.DEFAULT_MODEL
+    attachments = [attachment.model_dump() for attachment in request.attachments]
 
     if _is_cloud_model(model):
         telemetry.record("chat_error", session_id=session_id, model=model, reason="cloud_model_rejected")
@@ -58,6 +67,7 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
         model=model,
         new_session=is_new_session,
         message_length=len(request.message),
+        attachment_count=len(attachments),
     )
 
     abort_event = abort.create_abort_controller(request_id)
@@ -65,7 +75,7 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
 
     async def _stream_with_telemetry():
         try:
-            async for chunk in engine.query(request.message, abort_event):
+            async for chunk in engine.query(request.message, attachments, abort_event):
                 yield chunk
             telemetry.record(
                 "chat_completed",

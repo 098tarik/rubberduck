@@ -17,6 +17,7 @@ highlighting.
 - Connects to a local Ollama instance
 - Streams model responses to the browser
 - Saves chat sessions locally
+- Lets you attach text files and images as chat context
 - Shows responses in a clean web UI
 
 ## Requirements

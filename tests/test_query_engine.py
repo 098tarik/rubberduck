@@ -1,5 +1,6 @@
 """Tests for the QueryEngine class."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -118,6 +119,39 @@ def test_build_ollama_messages_includes_history(tmp_path):
     assert len(result) == 3  # system + 2 messages
     assert result[1] == {"role": "user", "content": "hi"}
     assert result[2] == {"role": "assistant", "content": "hello"}
+
+
+def test_build_ollama_messages_includes_attachment_context():
+    engine = QueryEngine("test-session")
+    engine._messages = [
+        {
+            "role": "user",
+            "content": "Summarize this",
+            "attachments": [
+                {
+                    "name": "notes.md",
+                    "media_type": "text/markdown",
+                    "kind": "text",
+                    "content": "# Hello",
+                },
+                {
+                    "name": "duck.png",
+                    "media_type": "image/png",
+                    "kind": "image",
+                    "content": "aW1hZ2U=",
+                },
+            ],
+            "id": "1",
+            "timestamp": "now",
+        }
+    ]
+
+    result = engine._build_ollama_messages("sys")
+
+    assert result[1]["role"] == "user"
+    assert "Summarize this" in result[1]["content"]
+    assert "notes.md" in result[1]["content"]
+    assert result[1]["images"] == ["aW1hZ2U="]
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +325,28 @@ async def test_query_user_message_prepended_to_history():
     # First message should be the user message
     assert engine._messages[0]["role"] == "user"
     assert engine._messages[0]["content"] == "my question"
+
+
+async def test_query_persists_attachments_in_history():
+    lines = [json.dumps({"done": True})]
+    mock_client = _make_mock_stream(lines)
+
+    with patch("app.query_engine.httpx.AsyncClient", return_value=mock_client):
+        engine = QueryEngine("sess-q7")
+        async for _ in engine.query(
+            "",
+            [
+                {
+                    "name": "notes.md",
+                    "media_type": "text/markdown",
+                    "kind": "text",
+                    "content": "# Attachment",
+                }
+            ],
+        ):
+            pass
+
+    assert engine._messages[0]["attachments"][0]["name"] == "notes.md"
 
 
 async def test_query_abort_closes_active_ollama_stream():

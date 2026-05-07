@@ -243,6 +243,22 @@ html, body {
     transform: scale(0.98);
 }
 
+.message-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.message-attachment {
+    padding: 4px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.72rem;
+}
+
 .message-content p { margin: 0 0 8px; }
 .message-content p:last-child { margin-bottom: 0; }
 .message-content ul, .message-content ol { margin: 6px 0 6px 20px; }
@@ -425,4 +441,54 @@ html, body {
 
 .model-notice strong {
     color: var(--accent);
+}
+
+.pending-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.attachment-chip-remove {
+    color: var(--text-dim);
+    font-weight: 700;
+}
+
+.attach-btn {
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.attach-btn:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.attach-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: var(--text);
 }

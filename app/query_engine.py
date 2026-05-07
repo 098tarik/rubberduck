@@ -132,19 +132,25 @@ class QueryEngine:
     async def query(
         self,
         user_content: str,
+        attachments: list[dict[str, object]] | None = None,
         abort_event: asyncio.Event | None = None,
     ) -> AsyncIterator[str]:
         """Stream a single assistant response as Server-Sent Events.
 
         Args:
             user_content: The newest user message to append to the session.
+            attachments: Optional structured file or image context to append to
+                the newest user message.
             abort_event: Optional event that, when set, cancels the in-flight
                 request after the current streaming chunk.
 
         Yields:
             SSE data frames containing streamed text chunks or an error payload.
         """
-        user_msg = messages.UserMessage(content=user_content)
+        user_msg = messages.UserMessage(
+            content=user_content,
+            attachments=attachments or [],
+        )
         self.append(user_msg.model_dump())
 
         system_context = context.build_system_context()
@@ -231,14 +237,98 @@ class QueryEngine:
     def _build_ollama_messages(
         self,
         system_context: str,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, object]]:
         """Build the message payload sent to the Ollama chat API."""
-        return [
+        ollama_messages: list[dict[str, object]] = [
             {"role": "system", "content": system_context},
-            *[
-                {"role": message["role"], "content": message["content"]}
-                for message in self._messages
-            ],
+        ]
+
+        for message in self._messages:
+            ollama_message: dict[str, object] = {
+                "role": message["role"],
+                "content": self._message_content_for_ollama(message),
+            }
+            image_payloads = self._image_payloads(message)
+            if image_payloads:
+                ollama_message["images"] = image_payloads
+            ollama_messages.append(ollama_message)
+
+        return ollama_messages
+
+    @staticmethod
+    def _attachments_for_message(message: dict[str, object]) -> list[dict[str, str]]:
+        """Return normalized attachment dictionaries for a stored message."""
+        attachments = message.get("attachments", [])
+        if not isinstance(attachments, list):
+            return []
+
+        normalized: list[dict[str, str]] = []
+        for attachment in attachments:
+            if not isinstance(attachment, dict):
+                continue
+            name = attachment.get("name")
+            media_type = attachment.get("media_type")
+            kind = attachment.get("kind")
+            content = attachment.get("content")
+            if not all(isinstance(value, str) and value for value in (name, media_type, kind, content)):
+                continue
+            normalized.append(
+                {
+                    "name": name,
+                    "media_type": media_type,
+                    "kind": kind,
+                    "content": content,
+                }
+            )
+        return normalized
+
+    @classmethod
+    def _message_content_for_ollama(cls, message: dict[str, object]) -> str:
+        """Render one stored message into the content format Ollama expects."""
+        base_content = str(message.get("content", "")).strip()
+        attachments = cls._attachments_for_message(message)
+        text_attachments = [
+            attachment for attachment in attachments if attachment["kind"] == "text"
+        ]
+        image_attachments = [
+            attachment for attachment in attachments if attachment["kind"] == "image"
+        ]
+
+        content_parts: list[str] = []
+        if base_content:
+            content_parts.append(base_content)
+
+        if text_attachments:
+            rendered_files = "\n\n".join(
+                (
+                    f"--- File: {attachment['name']} ({attachment['media_type']}) ---\n"
+                    f"{attachment['content']}"
+                )
+                for attachment in text_attachments
+            )
+            content_parts.append(
+                "Use the following file context while answering:\n\n"
+                f"{rendered_files}"
+            )
+
+        if image_attachments:
+            image_names = ", ".join(
+                attachment["name"] for attachment in image_attachments
+            )
+            content_parts.append(f"Attached images: {image_names}")
+
+        if not content_parts and attachments:
+            return "Use the attached context while answering."
+
+        return "\n\n".join(content_parts) or str(message.get("content", ""))
+
+    @classmethod
+    def _image_payloads(cls, message: dict[str, object]) -> list[str]:
+        """Return base64 image payloads attached to a stored message."""
+        return [
+            attachment["content"]
+            for attachment in cls._attachments_for_message(message)
+            if attachment["kind"] == "image"
         ]
 
     @staticmethod

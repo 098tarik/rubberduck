@@ -80,10 +80,21 @@
                 <span class="session-id" id="sessionIdBadge"></span>
             </div>
             <div class="model-notice" id="modelNotice" hidden></div>
+            <input
+                id="contextInput"
+                type="file"
+                multiple
+                accept=".c,.cfg,.cpp,.css,.csv,.go,.h,.hpp,.html,.ini,.java,.js,.json,.log,.md,.py,.rs,.sh,.sql,.toml,.ts,.tsx,.txt,.xml,.yaml,.yml,image/*"
+                hidden
+            >
+            <div class="pending-attachments" id="pendingAttachments" hidden></div>
             <div class="input-wrapper">
+                <button class="attach-btn" id="attachBtn" type="button" aria-label="Attach files or images">
+                    <svg viewBox="0 0 24 24"><path d="M16.5 6.5a4.5 4.5 0 0 0-6.364 0l-5.657 5.657a3 3 0 0 0 4.243 4.243l5.304-5.303 1.06 1.06-5.303 5.304a4.5 4.5 0 1 1-6.364-6.364l5.657-5.657a6 6 0 1 1 8.485 8.485l-5.833 5.834a7.5 7.5 0 0 1-10.607-10.607l5.127-5.127 1.06 1.06-5.126 5.127a6 6 0 1 0 8.485 8.485l5.833-5.833A4.5 4.5 0 0 0 16.5 6.5Z"/></svg>
+                </button>
                 <textarea
                     id="messageInput"
-                    placeholder="Tell the duck what's on your mind..."
+                    placeholder="Tell the duck what's on your mind or attach context..."
                     rows="1"
                     autofocus
                 ></textarea>

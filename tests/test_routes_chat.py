@@ -205,3 +205,59 @@ async def test_chat_records_telemetry_error_for_cloud_model(client):
 async def test_chat_requires_message_field(client):
     response = await client.post("/api/chat", json={"model": "llama3"})
     assert response.status_code == 422
+
+
+async def test_chat_accepts_attachment_without_message(client):
+    captured = {}
+
+    async def _mock_query(self, user_content, attachments=None, abort_event=None):
+        captured["user_content"] = user_content
+        captured["attachments"] = attachments
+        yield "data: [DONE]\n\n"
+
+    with (
+        patch.object(query_engine.QueryEngine, "query", _mock_query),
+        patch("app.routes.chat.telemetry.record"),
+    ):
+        async with client.stream(
+            "POST",
+            "/api/chat",
+            json={
+                "message": "",
+                "model": "llama3",
+                "attachments": [
+                    {
+                        "name": "notes.md",
+                        "media_type": "text/markdown",
+                        "kind": "text",
+                        "content": "# Notes",
+                    }
+                ],
+            },
+        ) as response:
+            assert response.status_code == 200
+            async for _ in response.aiter_bytes():
+                pass
+
+    assert captured["user_content"] == ""
+    assert captured["attachments"][0]["name"] == "notes.md"
+
+
+async def test_chat_rejects_invalid_attachment_payload(client):
+    response = await client.post(
+        "/api/chat",
+        json={
+            "message": "",
+            "model": "llama3",
+            "attachments": [
+                {
+                    "name": "duck.png",
+                    "media_type": "image/png",
+                    "kind": "image",
+                    "content": "not-base64",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
