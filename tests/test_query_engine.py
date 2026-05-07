@@ -307,6 +307,7 @@ async def test_query_abort_closes_active_ollama_stream():
         engine = QueryEngine("sess-q6")
         frames = [f async for f in engine.query("hello", abort_event)]
 
+    # Yield once so the abort callback's scheduled close task can run.
     await asyncio.sleep(0)
     done_frames = [f for f in frames if "[DONE]" in f]
     assert len(done_frames) == 1
