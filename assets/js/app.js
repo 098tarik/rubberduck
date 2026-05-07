@@ -233,10 +233,17 @@ function renderPendingAttachments() {
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'attachment-chip';
-        chip.innerHTML = (
-            `<span>${attachmentSummary(attachment)}</span>`
-            + `<span class="attachment-chip-remove" aria-hidden="true">×</span>`
-        );
+
+        const label = document.createElement('span');
+        label.textContent = attachmentSummary(attachment);
+
+        const removeIcon = document.createElement('span');
+        removeIcon.className = 'attachment-chip-remove';
+        removeIcon.setAttribute('aria-hidden', 'true');
+        removeIcon.textContent = '×';
+
+        chip.appendChild(label);
+        chip.appendChild(removeIcon);
         chip.setAttribute('aria-label', `Remove ${attachment.name}`);
         chip.addEventListener('click', () => {
             pendingAttachments.splice(index, 1);
