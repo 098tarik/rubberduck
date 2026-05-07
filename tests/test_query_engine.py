@@ -1,11 +1,13 @@
 """Tests for the QueryEngine class."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
+from app.abort import AbortController
 import app.config as config
 from app.query_engine import QueryEngine
 
@@ -298,15 +300,14 @@ async def test_query_abort_closes_active_ollama_stream():
     mock_client = _make_mock_stream(lines)
     mock_client.stream.return_value.is_error = False
     mock_client.stream.return_value.aclose = AsyncMock(return_value=None)
-    abort_event = asyncio.Event()
-    abort_event.__class__ = __import__("app.abort", fromlist=["AbortController"]).AbortController
-    abort_event.add_callback = abort_event.add_callback
+    abort_event = AbortController()
     abort_event.abort()
 
     with patch("app.query_engine.httpx.AsyncClient", return_value=mock_client):
         engine = QueryEngine("sess-q6")
         frames = [f async for f in engine.query("hello", abort_event)]
 
+    await asyncio.sleep(0)
     done_frames = [f for f in frames if "[DONE]" in f]
     assert len(done_frames) == 1
     mock_client.stream.return_value.aclose.assert_awaited_once()
