@@ -1,6 +1,5 @@
 """Tests for the chat API route."""
 
-import json
 from unittest.mock import patch
 
 import fastapi
@@ -8,9 +7,8 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-from app.routes.chat import _is_cloud_model
 from app.routes import chat as chat_module
-from app import query_engine
+from app import query_engine, runtime
 
 # Minimal FastAPI app with only the chat router (avoids static file mount)
 _test_app = fastapi.FastAPI()
@@ -25,36 +23,13 @@ async def client():
         yield c
 
 
-# ---------------------------------------------------------------------------
-# _is_cloud_model helper
-# ---------------------------------------------------------------------------
-
-def test_is_cloud_model_true():
-    assert _is_cloud_model("gpt-4:cloud") is True
-
-
-def test_is_cloud_model_true_any_prefix():
-    assert _is_cloud_model("deepseek-r1:cloud") is True
-
-
-def test_is_cloud_model_false_for_local():
-    assert _is_cloud_model("llama3") is False
-
-
-def test_is_cloud_model_false_for_model_with_tag():
-    assert _is_cloud_model("llama3:8b") is False
-
-
-# ---------------------------------------------------------------------------
-# Route: POST /api/chat
-# ---------------------------------------------------------------------------
-
-async def test_chat_rejects_cloud_model(client):
-    response = await client.post(
-        "/api/chat", json={"message": "hello", "model": "gpt-4:cloud"}
+def _runtime_model(name: str = "qwen3-4b-q4_k_m.gguf") -> runtime.ModelRecommendation:
+    return runtime.ModelRecommendation(
+        name=name,
+        url="https://example.com/model.gguf",
+        n_ctx=4096,
+        n_gpu_layers=0,
     )
-    assert response.status_code == 400
-    assert "cloud" in response.json()["detail"].lower()
 
 
 async def test_chat_returns_streaming_response(client):
@@ -63,11 +38,12 @@ async def test_chat_returns_streaming_response(client):
         yield "data: [DONE]\n\n"
 
     with (
+        patch("app.routes.chat.runtime.ensure_ready", return_value=_runtime_model()),
         patch.object(query_engine.QueryEngine, "query", _mock_query),
         patch("app.routes.chat.telemetry.record"),
     ):
         async with client.stream(
-            "POST", "/api/chat", json={"message": "hello", "model": "llama3"}
+            "POST", "/api/chat", json={"message": "hello"}
         ) as response:
             assert response.status_code == 200
             chunks = [chunk async for chunk in response.aiter_text()]
@@ -82,12 +58,11 @@ async def test_chat_includes_session_id_header(client):
         yield "data: [DONE]\n\n"
 
     with (
+        patch("app.routes.chat.runtime.ensure_ready", return_value=_runtime_model()),
         patch.object(query_engine.QueryEngine, "query", _mock_query),
         patch("app.routes.chat.telemetry.record"),
     ):
-        async with client.stream(
-            "POST", "/api/chat", json={"message": "hello", "model": "llama3"}
-        ) as response:
+        async with client.stream("POST", "/api/chat", json={"message": "hello"}) as response:
             session_id = response.headers.get("X-Session-Id")
             async for _ in response.aiter_bytes():
                 pass
@@ -101,13 +76,14 @@ async def test_chat_uses_provided_session_id(client):
         yield "data: [DONE]\n\n"
 
     with (
+        patch("app.routes.chat.runtime.ensure_ready", return_value=_runtime_model()),
         patch.object(query_engine.QueryEngine, "query", _mock_query),
         patch("app.routes.chat.telemetry.record"),
     ):
         async with client.stream(
             "POST",
             "/api/chat",
-            json={"message": "hello", "session_id": "my-session-id", "model": "llama3"},
+            json={"message": "hello", "session_id": "my-session-id"},
         ) as response:
             returned_session_id = response.headers.get("X-Session-Id")
             async for _ in response.aiter_bytes():
@@ -116,35 +92,16 @@ async def test_chat_uses_provided_session_id(client):
     assert returned_session_id == "my-session-id"
 
 
-async def test_chat_generates_new_session_id_when_omitted(client):
-    async def _mock_query(self, user_content, abort_event=None):
-        yield "data: [DONE]\n\n"
-
-    with (
-        patch.object(query_engine.QueryEngine, "query", _mock_query),
-        patch("app.routes.chat.telemetry.record"),
-    ):
-        async with client.stream(
-            "POST", "/api/chat", json={"message": "hello", "model": "llama3"}
-        ) as response:
-            session_id = response.headers.get("X-Session-Id")
-            async for _ in response.aiter_bytes():
-                pass
-
-    assert session_id is not None
-
-
 async def test_chat_cache_control_header(client):
     async def _mock_query(self, user_content, abort_event=None):
         yield "data: [DONE]\n\n"
 
     with (
+        patch("app.routes.chat.runtime.ensure_ready", return_value=_runtime_model()),
         patch.object(query_engine.QueryEngine, "query", _mock_query),
         patch("app.routes.chat.telemetry.record"),
     ):
-        async with client.stream(
-            "POST", "/api/chat", json={"message": "hello", "model": "llama3"}
-        ) as response:
+        async with client.stream("POST", "/api/chat", json={"message": "hello"}) as response:
             cache_control = response.headers.get("Cache-Control")
             async for _ in response.aiter_bytes():
                 pass
@@ -152,35 +109,18 @@ async def test_chat_cache_control_header(client):
     assert cache_control == "no-cache"
 
 
-async def test_chat_records_telemetry_on_start(client):
+async def test_chat_records_runtime_selected_model_on_completion(client):
     async def _mock_query(self, user_content, abort_event=None):
+        self.model = "qwen3-4b-q4_k_m.gguf"
         yield "data: [DONE]\n\n"
 
     with (
+        patch("app.routes.chat.runtime.ensure_ready", return_value=_runtime_model("qwen3-4b-q4_k_m.gguf")),
         patch.object(query_engine.QueryEngine, "query", _mock_query),
         patch("app.routes.chat.telemetry.record") as mock_record,
     ):
         async with client.stream(
-            "POST", "/api/chat", json={"message": "hello", "model": "llama3"}
-        ) as response:
-            async for _ in response.aiter_bytes():
-                pass
-
-    events = [call.args[0] for call in mock_record.call_args_list]
-    assert "chat_started" in events
-
-
-async def test_chat_records_resolved_model_on_completion(client):
-    async def _mock_query(self, user_content, abort_event=None):
-        self.model = "qwen2.5:0.5b"
-        yield "data: [DONE]\n\n"
-
-    with (
-        patch.object(query_engine.QueryEngine, "query", _mock_query),
-        patch("app.routes.chat.telemetry.record") as mock_record,
-    ):
-        async with client.stream(
-            "POST", "/api/chat", json={"message": "hello", "model": "phi3:mini"}
+            "POST", "/api/chat", json={"message": "hello", "model": "ignored"}
         ) as response:
             async for _ in response.aiter_bytes():
                 pass
@@ -188,20 +128,37 @@ async def test_chat_records_resolved_model_on_completion(client):
     completed_call = next(
         call for call in mock_record.call_args_list if call.args[0] == "chat_completed"
     )
-    assert completed_call.kwargs["requested_model"] == "phi3:mini"
-    assert completed_call.kwargs["model"] == "qwen2.5:0.5b"
+    assert completed_call.kwargs["requested_model"] == "qwen3-4b-q4_k_m.gguf"
+    assert completed_call.kwargs["model"] == "qwen3-4b-q4_k_m.gguf"
 
 
-async def test_chat_records_telemetry_error_for_cloud_model(client):
-    with patch("app.routes.chat.telemetry.record") as mock_record:
-        await client.post(
-            "/api/chat", json={"message": "hello", "model": "gpt-4:cloud"}
-        )
+async def test_chat_uses_runtime_model_over_requested_model(client):
+    captured = {}
 
-    events = [call.args[0] for call in mock_record.call_args_list]
-    assert "chat_error" in events
+    def _capture_init(self, session_id, model):
+        captured["model"] = model
+        self.session_id = session_id
+        self.model = model
+        self._messages = []
+
+    async def _mock_query(self, user_content, abort_event=None):
+        yield "data: [DONE]\n\n"
+
+    with (
+        patch("app.routes.chat.runtime.ensure_ready", return_value=_runtime_model("auto.gguf")),
+        patch.object(query_engine.QueryEngine, "__init__", _capture_init),
+        patch.object(query_engine.QueryEngine, "query", _mock_query),
+        patch("app.routes.chat.telemetry.record"),
+    ):
+        async with client.stream(
+            "POST", "/api/chat", json={"message": "hello", "model": "ignored.gguf"}
+        ) as response:
+            async for _ in response.aiter_bytes():
+                pass
+
+    assert captured["model"] == "auto.gguf"
 
 
 async def test_chat_requires_message_field(client):
-    response = await client.post("/api/chat", json={"model": "llama3"})
+    response = await client.post("/api/chat", json={})
     assert response.status_code == 422

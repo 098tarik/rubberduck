@@ -2,10 +2,8 @@ const chatContainer = document.getElementById('chatContainer');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const welcome = document.getElementById('welcome');
-const modelSelect = document.getElementById('modelSelect');
 const sessionSelect = document.getElementById('sessionSelect');
 const sessionBadge = document.getElementById('sessionIdBadge');
-const modelNotice = document.getElementById('modelNotice');
 
 let sessionId = null;
 let isStreaming = false;
@@ -95,30 +93,6 @@ function fallbackCopyToClipboard(text) {
 
     if (!copied) {
         throw new Error('Clipboard copy failed.');
-    }
-}
-
-async function loadModels() {
-    try {
-        const response = await fetch('/api/models');
-        const payload = await response.json();
-        const models = (payload.models || []).filter((m) => !m.endsWith(':cloud'));
-
-        modelSelect.innerHTML = '';
-        const defaultModel = payload.default || 'deepseek-r1:8b';
-        for (const model of models.length ? models : [defaultModel]) {
-            const option = document.createElement('option');
-            option.value = model;
-            option.textContent = model;
-            if (model === defaultModel) {
-                option.selected = true;
-            }
-            modelSelect.appendChild(option);
-        }
-    } catch {
-        modelSelect.innerHTML = (
-            '<option value="deepseek-r1:8b">deepseek-r1:8b</option>'
-        );
     }
 }
 
@@ -324,37 +298,6 @@ function setTypingIndicatorStatus(statusText) {
     statusElement.textContent = statusText || DEFAULT_TYPING_STATUS;
 }
 
-function clearModelNotice() {
-    if (!modelNotice) {
-        return;
-    }
-
-    modelNotice.hidden = true;
-    modelNotice.innerHTML = '';
-}
-
-function showModelNotice(messageHtml) {
-    if (!modelNotice) {
-        return;
-    }
-
-    modelNotice.innerHTML = messageHtml;
-    modelNotice.hidden = false;
-}
-
-function updateSelectedModel(modelName) {
-    if (!modelName || !modelSelect) {
-        return;
-    }
-
-    const existingOption = Array.from(modelSelect.options).find((option) => option.value === modelName);
-    if (!existingOption) {
-        return;
-    }
-
-    modelSelect.value = modelName;
-}
-
 function updateSessionBadge(serverSessionId) {
     if (!serverSessionId) {
         return;
@@ -402,17 +345,6 @@ async function streamAssistantResponse(response) {
             }
 
             if (parsedPayload.status?.label) {
-                updateSelectedModel(parsedPayload.status.model);
-                if (
-                    parsedPayload.status.reason === 'memory'
-                    && parsedPayload.status.requested_model
-                    && parsedPayload.status.model
-                    && parsedPayload.status.requested_model !== parsedPayload.status.model
-                ) {
-                    showModelNotice(
-                        `Selected model <strong>${parsedPayload.status.requested_model}</strong> did not fit in available memory, so RubberDuck used <strong>${parsedPayload.status.model}</strong> for this response.`
-                    );
-                }
                 setTypingIndicatorStatus(parsedPayload.status.label);
                 scrollChatToBottom();
             } else if (parsedPayload.text) {
@@ -463,7 +395,6 @@ async function sendMessage() {
     isStreaming = true;
     messageInput.value = '';
     messageInput.style.height = 'auto';
-    clearModelNotice();
 
     addMessage('user', text);
     addTypingIndicator();
@@ -480,7 +411,6 @@ async function sendMessage() {
             body: JSON.stringify({
                 message: text,
                 session_id: sessionId,
-                model: modelSelect.value,
             }),
             signal: currentAbortController.signal,
         });
@@ -534,7 +464,7 @@ function registerEventListeners() {
 
 async function initializeApp() {
     registerEventListeners();
-    await Promise.all([loadModels(), loadSessions()]);
+    await loadSessions();
 }
 
 window.newSession = newSession;

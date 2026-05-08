@@ -1,6 +1,6 @@
 # 🦆 rubberduck.ai
 
-`rubberduck.ai` is a small local chat app that talks to an Ollama model.
+`rubberduck.ai` is a small local chat app that talks to an embedded `llama.cpp` model.
 It gives you a simple web interface where you can ask questions, keep chat
 history, switch models, render Markdown, and view code blocks with syntax
 highlighting.
@@ -14,18 +14,19 @@ highlighting.
 ## What this project does
 
 - Runs a FastAPI server
-- Connects to a local Ollama instance
+- Starts a local bundled `llama.cpp` server
 - Streams model responses to the browser
 - Saves chat sessions locally
-- Shows responses in a clean web UI
+- Downloads one recommended GGUF model on first launch
+- Shows responses in a clean web UI with no model picker
 
 ## Requirements
 
 Before you start, make sure you have:
 
 - Python 3.11+
-- [Ollama](https://ollama.com/download) installed and running
-- At least one Ollama model pulled locally
+- A `llama-server` binary available at `./runtime/llama-server` (or set `LLAMA_CPP_SERVER_BIN`)
+- Internet access for first launch model download
 
 ## Run locally
 
@@ -37,15 +38,7 @@ Before you start, make sure you have:
 brew install python@3.11
 ```
 
-2. Install [Ollama](https://ollama.com/download) and pull a model:
-
-```bash
-brew install ollama
-ollama serve &
-ollama pull deepseek-r1:8b
-```
-
-3. Clone the repository and install dependencies:
+2. Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/098tarik/rubberduck.git
@@ -54,13 +47,13 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install .
 ```
 
-4. Start the app:
+3. Start the app:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-5. Open `http://localhost:8000` in your browser.
+4. Open `http://localhost:8000` in your browser.
 
 ---
 
@@ -72,15 +65,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 sudo apt update && sudo apt install python3.11 python3.11-venv python3-pip -y
 ```
 
-2. Install [Ollama](https://ollama.com/download):
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama serve &
-ollama pull deepseek-r1:8b
-```
-
-3. Clone the repository and install dependencies:
+2. Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/098tarik/rubberduck.git
@@ -89,13 +74,13 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install .
 ```
 
-4. Start the app:
+3. Start the app:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-5. Open `http://localhost:8000` in your browser.
+4. Open `http://localhost:8000` in your browser.
 
 ---
 
@@ -104,16 +89,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 1. Download and install Python 3.11+ from [python.org](https://www.python.org/downloads/).
    Make sure to check **"Add Python to PATH"** during installation.
 
-2. Download and install [Ollama for Windows](https://ollama.com/download/windows).
-   Ollama starts automatically after installation.
-
-3. Open **PowerShell** and pull a model:
-
-```powershell
-ollama pull deepseek-r1:8b
-```
-
-4. Clone the repository and install dependencies:
+2. Clone the repository and install dependencies:
 
 ```powershell
 git clone https://github.com/098tarik/rubberduck.git
@@ -126,18 +102,17 @@ pip install .
    > If you see an execution-policy error, run:
    > `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
 
-5. Start the app:
+3. Start the app:
 
 ```powershell
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-6. Open `http://localhost:8000` in your browser.
+4. Open `http://localhost:8000` in your browser.
 
 ---
 
-Any model from the [Ollama library](https://ollama.com/library) works. Smaller
-models (≤ 8 B parameters) respond faster on consumer hardware.
+On first launch, RubberDuck auto-detects your hardware and downloads exactly one recommended model.
 
 ## Configuration
 
@@ -145,31 +120,34 @@ The app uses these environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_URL` | `http://localhost:11434` | URL of your Ollama server |
-| `OLLAMA_MODEL` | `deepseek-r1:8b` | Default model to use |
+| `LLAMA_CPP_SERVER_BIN` | `./runtime/llama-server` | Path to bundled llama.cpp server binary |
+| `LLAMA_SERVER_HOST` | `127.0.0.1` | Host for local llama.cpp server |
+| `LLAMA_SERVER_PORT` | `8080` | Port for local llama.cpp server |
+| `LLAMA_SERVER_URL` | `http://127.0.0.1:8080/v1` | OpenAI-compatible llama.cpp API base URL |
+| `MODELS_DIR` | `./models` | Directory where first-launch model is downloaded |
 | `SESSIONS_DIR` | current directory | Folder used to store chat history |
 
 **macOS / Linux:**
 
 ```bash
-export OLLAMA_URL=http://localhost:11434
-export OLLAMA_MODEL=deepseek-r1:8b
+export LLAMA_CPP_SERVER_BIN=./runtime/llama-server
+export MODELS_DIR=./models
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-$env:OLLAMA_URL = "http://localhost:11434"
-$env:OLLAMA_MODEL = "deepseek-r1:8b"
+$env:LLAMA_CPP_SERVER_BIN = ".\runtime\llama-server.exe"
+$env:MODELS_DIR = ".\models"
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
 **Windows (Command Prompt):**
 
 ```cmd
-set OLLAMA_URL=http://localhost:11434
-set OLLAMA_MODEL=deepseek-r1:8b
+set LLAMA_CPP_SERVER_BIN=.\runtime\llama-server.exe
+set MODELS_DIR=.\models
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -187,8 +165,8 @@ Run the container:
 
 ```bash
 docker run --rm -p 8000:8000 \
-  -e OLLAMA_URL=http://host.docker.internal:11434 \
-  -e OLLAMA_MODEL=deepseek-r1:8b \
+  -e LLAMA_CPP_SERVER_BIN=/app/runtime/llama-server \
+  -e MODELS_DIR=/app/models \
   rubberduck
 ```
 
@@ -196,8 +174,8 @@ docker run --rm -p 8000:8000 \
 
 ```powershell
 docker run --rm -p 8000:8000 `
-  -e OLLAMA_URL=http://host.docker.internal:11434 `
-  -e OLLAMA_MODEL=deepseek-r1:8b `
+  -e LLAMA_CPP_SERVER_BIN=/app/runtime/llama-server `
+  -e MODELS_DIR=/app/models `
   rubberduck
 ```
 

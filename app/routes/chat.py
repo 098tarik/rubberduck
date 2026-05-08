@@ -7,7 +7,7 @@ import fastapi
 import fastapi.responses
 import pydantic
 
-from app import abort, config, query_engine, telemetry
+from app import abort, query_engine, runtime, telemetry
 
 router = fastapi.APIRouter()
 
@@ -18,12 +18,6 @@ class ChatRequest(pydantic.BaseModel):
     session_id: str | None = None
     model: str | None = None
     message: str
-
-
-def _is_cloud_model(model: str) -> bool:
-    """Return True if the model name refers to a cloud-hosted model."""
-    return model.endswith(":cloud")
-
 
 @router.post("/chat/{request_id}/cancel")
 async def cancel_chat(request_id: str) -> dict[str, bool]:
@@ -42,20 +36,15 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
     """Start streaming a chat response for the current session."""
     session_id = request.session_id or str(uuid.uuid4())
     request_id = str(uuid.uuid4())
-    model = request.model or config.DEFAULT_MODEL
-
-    if _is_cloud_model(model):
-        telemetry.record("chat_error", session_id=session_id, model=model, reason="cloud_model_rejected")
-        raise fastapi.HTTPException(
-            status_code=400,
-            detail="Cloud models are not supported. Please select a local Ollama model.",
-        )
+    selected_model = await runtime.ensure_ready()
+    model = selected_model.name
 
     is_new_session = request.session_id is None
     telemetry.record(
         "chat_started",
         session_id=session_id,
         model=model,
+        requested_model=request.model,
         new_session=is_new_session,
         message_length=len(request.message),
     )

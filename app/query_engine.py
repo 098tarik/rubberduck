@@ -11,16 +11,14 @@ from app import abort, config, context, history, messages
 
 STREAM_STATUS_LABELS = {
     "preparing": "Preparing context...",
-    "connecting": "Contacting Ollama...",
+    "connecting": "Starting local model...",
     "waiting": "Waiting for first token...",
     "responding": "Streaming response...",
 }
 
-MEMORY_ERROR_FRAGMENT = "model requires more system memory"
-
 
 class QueryEngine:
-    """Manage chat history and stream responses from Ollama."""
+    """Manage chat history and stream responses from llama.cpp."""
 
     def __init__(self, session_id: str, model: str = config.DEFAULT_MODEL):
         """Initialize a query engine for a single session."""
@@ -70,64 +68,24 @@ class QueryEngine:
 
     @staticmethod
     def _extract_error_message(response: httpx.Response) -> str:
-        """Extract the most useful Ollama error message from a failed response."""
+        """Extract the most useful runtime error message from a failed response."""
         raw_text = response.text
         try:
             payload = json.loads(raw_text)
         except json.JSONDecodeError:
             return raw_text
 
-        return str(payload.get("error") or raw_text)
-
-    @staticmethod
-    def _is_memory_pressure_error(error_text: str) -> bool:
-        """Return True when Ollama reports the model will not fit in RAM."""
-        return MEMORY_ERROR_FRAGMENT in error_text.lower()
-
-    @staticmethod
-    def _local_models_from_payload(payload: dict[str, object]) -> list[dict[str, object]]:
-        """Extract local Ollama models sorted from smallest to largest."""
-        local_models: list[dict[str, object]] = []
-        for item in payload.get("models", []):
-            if not isinstance(item, dict):
-                continue
-            name = item.get("name")
-            if not isinstance(name, str) or not name or name.endswith(":cloud"):
-                continue
-            size = item.get("size")
-            local_models.append(
-                {
-                    "name": name,
-                    "size": size if isinstance(size, int) else 0,
-                }
-            )
-
-        return sorted(local_models, key=lambda item: (item["size"], item["name"]))
-
-    async def _find_smaller_model(
-        self,
-        client: httpx.AsyncClient,
-        current_model: str,
-    ) -> str | None:
-        """Return the next smaller installed local model, if one exists."""
-        response = await client.get(f"{config.OLLAMA_URL}/api/tags", timeout=10.0)
-        response.raise_for_status()
-        models = self._local_models_from_payload(response.json())
-
-        current_entry = next(
-            (item for item in models if item["name"] == current_model),
-            None,
-        )
-        if current_entry is not None:
-            for item in models:
-                if item["name"] != current_model and item["size"] < current_entry["size"]:
-                    return str(item["name"])
-
-        for item in models:
-            if item["name"] != current_model:
-                return str(item["name"])
-
-        return None
+        if isinstance(payload, dict):
+            if payload.get("error"):
+                return str(payload["error"])
+            choices = payload.get("choices")
+            if isinstance(choices, list) and choices:
+                first = choices[0]
+                if isinstance(first, dict):
+                    message = first.get("message")
+                    if isinstance(message, dict) and message.get("content"):
+                        return str(message["content"])
+        return raw_text
 
     async def query(
         self,
@@ -157,67 +115,45 @@ class QueryEngine:
             yield self._status_frame("preparing")
             async with httpx.AsyncClient() as client:
                 active_model = self.model
-                tried_fallback = False
+                yield self._status_frame("connecting", model=active_model)
+                async with client.stream(
+                    "POST",
+                    f"{config.LLAMA_SERVER_URL}/chat/completions",
+                    json={
+                        "model": active_model,
+                        "messages": ollama_messages,
+                        "stream": True,
+                    },
+                    timeout=120.0,
+                ) as response:
+                    if isinstance(abort_event, abort.AbortController):
+                        abort_event.add_callback(response.aclose)
 
-                while True:
-                    yield self._status_frame("connecting", model=active_model)
-                    async with client.stream(
-                        "POST",
-                        f"{config.OLLAMA_URL}/api/chat",
-                        json={
-                            "model": active_model,
-                            "messages": ollama_messages,
-                            "stream": True,
-                        },
-                        timeout=120.0,
-                    ) as response:
-                        if isinstance(abort_event, abort.AbortController):
-                            abort_event.add_callback(response.aclose)
+                    if response.is_error:
+                        await response.aread()
+                        response.raise_for_status()
 
-                        if response.is_error:
-                            await response.aread()
-                            error_text = self._extract_error_message(response)
-                            if not tried_fallback and self._is_memory_pressure_error(error_text):
-                                fallback_model = await self._find_smaller_model(
-                                    client,
-                                    active_model,
-                                )
-                                if fallback_model is not None:
-                                    tried_fallback = True
-                                    active_model = fallback_model
-                                    yield self._status_frame(
-                                        "preparing",
-                                        label=f"Switching to {fallback_model} to fit memory...",
-                                        model=fallback_model,
-                                        requested_model=self.model,
-                                        reason="memory",
-                                    )
-                                    continue
+                    self.model = active_model
+                    yield self._status_frame("waiting", model=active_model)
+                    async for line in response.aiter_lines():
+                        if abort_event and abort_event.is_set():
+                            aborted = True
+                            break
 
-                            response.raise_for_status()
+                        if not line:
+                            continue
 
-                        self.model = active_model
-                        yield self._status_frame("waiting", model=active_model)
-                        async for line in response.aiter_lines():
-                            if abort_event and abort_event.is_set():
-                                aborted = True
-                                break
-
-                            if not line:
-                                continue
-
-                            full_text, should_stop, frame = self._parse_stream_line(
-                                line,
-                                full_text,
-                            )
-                            if frame is not None:
-                                if not yielded_response_status and '"text":' in frame:
-                                    yield self._status_frame("responding", model=active_model)
-                                    yielded_response_status = True
-                                yield frame
-                            if should_stop:
-                                break
-                        break
+                        full_text, should_stop, frame = self._parse_stream_line(
+                            line,
+                            full_text,
+                        )
+                        if frame is not None:
+                            if not yielded_response_status and '"text":' in frame:
+                                yield self._status_frame("responding", model=active_model)
+                                yielded_response_status = True
+                            yield frame
+                        if should_stop:
+                            break
 
             asst_msg = messages.AssistantMessage(content=full_text)
             self.append(asst_msg.model_dump())
@@ -232,7 +168,7 @@ class QueryEngine:
         self,
         system_context: str,
     ) -> list[dict[str, str]]:
-        """Build the message payload sent to the Ollama chat API."""
+        """Build the message payload sent to llama.cpp chat completions API."""
         return [
             {"role": "system", "content": system_context},
             *[
@@ -246,16 +182,30 @@ class QueryEngine:
         line: str,
         full_text: str,
     ) -> tuple[str, bool, str | None]:
-        """Convert one Ollama stream line into an SSE frame."""
+        """Convert one llama.cpp stream line into an app SSE frame."""
+        stripped_line = line.strip()
+        if not stripped_line.startswith("data:"):
+            return full_text, False, None
+
+        payload_text = stripped_line.removeprefix("data:").strip()
+        if payload_text == "[DONE]":
+            return full_text, True, "data: [DONE]\n\n"
+
         try:
-            payload = json.loads(line)
+            payload = json.loads(payload_text)
         except json.JSONDecodeError:
             return full_text, False, None
 
-        if payload.get("done"):
-            return full_text, True, "data: [DONE]\n\n"
-
-        text = payload.get("message", {}).get("content", "")
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return full_text, False, None
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            return full_text, False, None
+        delta = first_choice.get("delta")
+        if not isinstance(delta, dict):
+            return full_text, False, None
+        text = delta.get("content", "")
         if not text:
             return full_text, False, None
 

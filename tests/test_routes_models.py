@@ -1,7 +1,6 @@
 """Tests for the models API route."""
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import fastapi
 import httpx
@@ -9,7 +8,7 @@ import pytest
 from httpx import ASGITransport
 
 from app.routes import models as models_module
-import app.config as config
+from app import runtime
 
 # Minimal FastAPI app with only the models router
 _test_app = fastapi.FastAPI()
@@ -24,122 +23,35 @@ async def client():
         yield c
 
 
-def _make_mock_client(json_data):
-    """Return a mocked httpx.AsyncClient whose GET returns the given dict."""
-    mock_response = MagicMock()
-    mock_response.json.return_value = json_data
-    mock_response.raise_for_status = MagicMock()
-
-    mock_client = AsyncMock()
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-    mock_client.get.return_value = mock_response
-
-    return mock_client
-
-
-async def test_list_models_returns_model_names(client):
-    mock_client = _make_mock_client(
-        {"models": [{"name": "llama3"}, {"name": "mistral:7b"}]}
+def _runtime_model(name: str = "qwen3-4b-q4_k_m.gguf") -> runtime.ModelRecommendation:
+    return runtime.ModelRecommendation(
+        name=name,
+        url="https://example.com/model.gguf",
+        n_ctx=4096,
+        n_gpu_layers=0,
     )
+
+
+async def test_list_models_returns_single_auto_selected_model(client):
     with (
-        patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
+        patch("app.routes.models.runtime.ensure_ready", return_value=_runtime_model("auto.gguf")),
         patch("app.routes.models.telemetry.record"),
     ):
         response = await client.get("/api/models")
 
     assert response.status_code == 200
     body = response.json()
-    assert "llama3" in body["models"]
-    assert "mistral:7b" in body["models"]
+    assert body["models"] == ["auto.gguf"]
+    assert body["default"] == "auto.gguf"
+    assert body["runtime"] == "embedded-llama.cpp"
 
 
-async def test_list_models_filters_cloud_models(client):
-    mock_client = _make_mock_client(
-        {"models": [{"name": "llama3"}, {"name": "gpt-4:cloud"}]}
-    )
+async def test_list_models_records_telemetry(client):
     with (
-        patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
-        patch("app.routes.models.telemetry.record"),
-    ):
-        response = await client.get("/api/models")
-
-    body = response.json()
-    assert "gpt-4:cloud" not in body["models"]
-    assert "llama3" in body["models"]
-
-
-async def test_list_models_returns_default(client, monkeypatch):
-    monkeypatch.setattr(config, "DEFAULT_MODEL", "deepseek-r1:8b")
-    mock_client = _make_mock_client({"models": [{"name": "deepseek-r1:8b"}]})
-    with (
-        patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
-        patch("app.routes.models.telemetry.record"),
-    ):
-        response = await client.get("/api/models")
-
-    body = response.json()
-    assert body["default"] == "deepseek-r1:8b"
-
-
-async def test_list_models_ignores_entries_without_name(client):
-    mock_client = _make_mock_client(
-        {"models": [{"name": "llama3"}, {}, {"name": ""}]}
-    )
-    with (
-        patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
-        patch("app.routes.models.telemetry.record"),
-    ):
-        response = await client.get("/api/models")
-
-    body = response.json()
-    assert body["models"] == ["llama3"]
-
-
-async def test_list_models_graceful_on_http_error(client, monkeypatch):
-    monkeypatch.setattr(config, "DEFAULT_MODEL", "deepseek-r1:8b")
-
-    mock_client = AsyncMock()
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-    mock_client.get.side_effect = httpx.ConnectError("refused")
-
-    with (
-        patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
-        patch("app.routes.models.telemetry.record"),
-    ):
-        response = await client.get("/api/models")
-
-    assert response.status_code == 200
-    body = response.json()
-    # Falls back to default model and includes an error key
-    assert body["default"] == "deepseek-r1:8b"
-    assert "error" in body
-
-
-async def test_list_models_records_telemetry_on_success(client):
-    mock_client = _make_mock_client({"models": [{"name": "llama3"}]})
-    with (
-        patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
+        patch("app.routes.models.runtime.ensure_ready", return_value=_runtime_model("auto.gguf")),
         patch("app.routes.models.telemetry.record") as mock_record,
     ):
         await client.get("/api/models")
 
     events = [call.args[0] for call in mock_record.call_args_list]
     assert "models_listed" in events
-
-
-async def test_list_models_records_telemetry_on_error(client):
-    mock_client = AsyncMock()
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
-    mock_client.get.side_effect = httpx.ConnectError("refused")
-
-    with (
-        patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
-        patch("app.routes.models.telemetry.record") as mock_record,
-    ):
-        await client.get("/api/models")
-
-    events = [call.args[0] for call in mock_record.call_args_list]
-    assert "models_listed_error" in events
