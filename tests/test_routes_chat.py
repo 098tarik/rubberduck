@@ -110,8 +110,11 @@ async def test_chat_cache_control_header(client):
 
 
 async def test_chat_records_runtime_selected_model_on_completion(client):
+    observed = {"model_set": None}
+
     async def _mock_query(self, user_content, abort_event=None):
         self.model = "qwen3-4b-q4_k_m.gguf"
+        observed["model_set"] = self.model
         yield "data: [DONE]\n\n"
 
     with (
@@ -128,6 +131,7 @@ async def test_chat_records_runtime_selected_model_on_completion(client):
     completed_call = next(
         call for call in mock_record.call_args_list if call.args[0] == "chat_completed"
     )
+    assert observed["model_set"] == "qwen3-4b-q4_k_m.gguf"
     assert completed_call.kwargs["requested_model"] == "qwen3-4b-q4_k_m.gguf"
     assert completed_call.kwargs["model"] == "qwen3-4b-q4_k_m.gguf"
 

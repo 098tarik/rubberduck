@@ -44,7 +44,7 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
         "chat_started",
         session_id=session_id,
         model=model,
-        requested_model=request.model,
+        ignored_requested_model=request.model,
         new_session=is_new_session,
         message_length=len(request.message),
     )

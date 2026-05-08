@@ -187,7 +187,7 @@ class QueryEngine:
         if not stripped_line.startswith("data:"):
             return full_text, False, None
 
-        payload_text = stripped_line.removeprefix("data:").strip()
+        payload_text = stripped_line.removeprefix("data:").lstrip()
         if payload_text == "[DONE]":
             return full_text, True, "data: [DONE]\n\n"
 

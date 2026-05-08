@@ -25,6 +25,13 @@ def test_parse_stream_line_invalid_json():
     assert frame is None
 
 
+def test_parse_stream_line_ignores_non_data_lines():
+    full, stop, frame = QueryEngine._parse_stream_line("event: ping", "acc")
+    assert full == "acc"
+    assert stop is False
+    assert frame is None
+
+
 def test_parse_stream_line_done_true():
     full, stop, frame = QueryEngine._parse_stream_line("data: [DONE]", "acc")
     assert full == "acc"
@@ -53,7 +60,7 @@ def test_status_frame_contains_phase_and_label():
     }
 
 
-def test_build_ollama_messages_starts_with_system():
+def test_build_messages_starts_with_system():
     engine = QueryEngine("test-session")
     result = engine._build_ollama_messages("You are helpful.")
     assert result[0] == {"role": "system", "content": "You are helpful."}

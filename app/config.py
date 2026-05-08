@@ -20,7 +20,7 @@ MODELS_DIR: pathlib.Path = pathlib.Path(
 )
 
 SESSIONS_DIR: pathlib.Path = pathlib.Path(
-	os.getenv("SESSIONS_DIR", "./sessions")
+    os.getenv("SESSIONS_DIR", "./sessions")
 )
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 

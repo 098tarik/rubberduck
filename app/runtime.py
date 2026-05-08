@@ -28,6 +28,16 @@ class ModelRecommendation:
 _ready_lock = asyncio.Lock()
 _cached_recommendation: ModelRecommendation | None = None
 _server_process: subprocess.Popen[str] | None = None
+MAX_HEALTH_CHECK_ATTEMPTS = 40
+HEALTH_CHECK_INTERVAL_SECONDS = 0.25
+QWEN3_4B_Q4_K_M_URL = (
+    "https://huggingface.co/bartowski/Qwen3-4B-GGUF/resolve/main/"
+    "Qwen3-4B-Q4_K_M.gguf?download=true"
+)
+QWEN3_8B_Q4_K_M_URL = (
+    "https://huggingface.co/bartowski/Qwen3-8B-GGUF/resolve/main/"
+    "Qwen3-8B-Q4_K_M.gguf?download=true"
+)
 
 
 def _total_memory_gib() -> float:
@@ -71,7 +81,7 @@ def _recommended_model_for_machine() -> ModelRecommendation:
     if machine in {"arm64", "aarch64"} and platform.system() == "Darwin":
         return ModelRecommendation(
             name="qwen3-4b-q4_k_m.gguf",
-            url="https://huggingface.co/bartowski/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true",
+            url=QWEN3_4B_Q4_K_M_URL,
             n_ctx=4096,
             n_gpu_layers=99,
         )
@@ -79,14 +89,14 @@ def _recommended_model_for_machine() -> ModelRecommendation:
     if mem_gib >= 16:
         return ModelRecommendation(
             name="qwen3-8b-q4_k_m.gguf",
-            url="https://huggingface.co/bartowski/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf?download=true",
+            url=QWEN3_8B_Q4_K_M_URL,
             n_ctx=4096,
             n_gpu_layers=35,
         )
 
     return ModelRecommendation(
         name="qwen3-4b-q4_k_m.gguf",
-        url="https://huggingface.co/bartowski/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true",
+        url=QWEN3_4B_Q4_K_M_URL,
         n_ctx=4096,
         n_gpu_layers=0,
     )
@@ -156,6 +166,8 @@ async def _start_server(model_path: pathlib.Path, model: ModelRecommendation) ->
     if model.n_gpu_layers > 0:
         cmd.extend(["--n-gpu-layers", str(model.n_gpu_layers)])
 
+    # Safe: shell=False and all command elements are controlled in-process
+    # (configured binary path + numeric flags + local model file path).
     _server_process = subprocess.Popen(  # noqa: S603
         cmd,
         cwd=str(config.LLAMA_CPP_SERVER_BIN.parent),
@@ -170,10 +182,10 @@ async def _start_server(model_path: pathlib.Path, model: ModelRecommendation) ->
         port=config.LLAMA_SERVER_PORT,
     )
 
-    for _ in range(40):
+    for _ in range(MAX_HEALTH_CHECK_ATTEMPTS):
         if await _server_healthy():
             return
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(HEALTH_CHECK_INTERVAL_SECONDS)
 
 
 async def ensure_ready() -> ModelRecommendation:
