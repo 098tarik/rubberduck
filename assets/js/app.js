@@ -6,6 +6,7 @@ const modelSelect = document.getElementById('modelSelect');
 const sessionSelect = document.getElementById('sessionSelect');
 const sessionBadge = document.getElementById('sessionIdBadge');
 const modelNotice = document.getElementById('modelNotice');
+const suggestBtn = document.getElementById('suggestBtn');
 
 let sessionId = null;
 let isStreaming = false;
@@ -531,6 +532,11 @@ function registerEventListeners() {
             sendMessage();
         }
     });
+
+    if (suggestBtn) {
+        suggestBtn.addEventListener('click', openRecommendations);
+    }
+
 }
 
 async function initializeApp() {
@@ -538,8 +544,229 @@ async function initializeApp() {
     await Promise.all([loadModels(), loadSessions()]);
 }
 
+// ── Model Recommendations Modal ────────────────────────────────────────
+
+function _ensureRecommendationsModal() {
+    let overlayElement = document.getElementById('recommendationsOverlay');
+    let bodyElement = document.getElementById('recModalBody');
+
+    if (!overlayElement || !bodyElement) {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+            <div class="modal-overlay" id="recommendationsOverlay" hidden aria-modal="true" role="dialog" aria-labelledby="recModalTitle">
+                <div class="modal" id="recommendationsModal">
+                    <div class="modal-header">
+                        <h2 id="recModalTitle">Recommendations</h2>
+                        <button class="modal-close" type="button" id="closeRecommendationsBtn" aria-label="Close">X</button>
+                    </div>
+                    <div class="modal-body" id="recModalBody"></div>
+                </div>
+            </div>`;
+        document.body.appendChild(wrapper.firstElementChild);
+        overlayElement = document.getElementById('recommendationsOverlay');
+        bodyElement = document.getElementById('recModalBody');
+    }
+
+    return { overlayElement, bodyElement };
+}
+
+function openRecommendations() {
+    const { overlayElement, bodyElement } = _ensureRecommendationsModal();
+
+    if (!overlayElement || !bodyElement) {
+        showModelNotice('Model recommendations modal is unavailable right now.');
+        return;
+    }
+
+    overlayElement.hidden = false;
+    overlayElement.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', _recEscHandler);
+    bodyElement.innerHTML = `
+        <div class="rec-loading">
+            <div class="rec-spinner"></div>
+            <span>Detecting your hardware…</span>
+        </div>`;
+    _fetchRecommendations();
+}
+
+function closeRecommendations() {
+    const overlayElement = document.getElementById('recommendationsOverlay');
+    if (!overlayElement) {
+        return;
+    }
+
+    overlayElement.hidden = true;
+    overlayElement.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', _recEscHandler);
+}
+
+function _recEscHandler(event) {
+    if (event.key === 'Escape') {
+        closeRecommendations();
+    }
+}
+
+document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+        return;
+    }
+
+    if (target.id === 'suggestBtn') {
+        openRecommendations();
+        return;
+    }
+
+    if (target.id === 'closeRecommendationsBtn') {
+        closeRecommendations();
+        return;
+    }
+
+    const overlayElement = document.getElementById('recommendationsOverlay');
+    if (overlayElement && target === overlayElement) {
+        closeRecommendations();
+    }
+});
+
+async function _fetchRecommendations() {
+    const bodyElement = document.getElementById('recModalBody');
+    if (!bodyElement) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/recommendations');
+        if (!response.ok) {
+            throw new Error(`Server error ${response.status}`);
+        }
+        const data = await response.json();
+        _renderRecommendations(data);
+    } catch (error) {
+        bodyElement.innerHTML = `
+            <div class="rec-error">
+                <strong>Could not load recommendations</strong>
+                ${error.message || 'Unknown error'}
+            </div>`;
+    }
+}
+
+function _hwBannerHtml(hw) {
+    const gpuText = hw.gpus.length
+        ? hw.gpus.map((g) => `${g.name} (${g.vram_gb} GB)`).join(', ')
+        : 'None detected';
+
+    return `
+        <div class="hw-banner">
+            <div class="hw-stat">
+                <span class="hw-stat-label">Platform</span>
+                <span class="hw-stat-value">${hw.platform}</span>
+            </div>
+            <div class="hw-stat">
+                <span class="hw-stat-label">CPU</span>
+                <span class="hw-stat-value">${hw.cpu_cores}c / ${hw.cpu_threads}t</span>
+            </div>
+            <div class="hw-stat">
+                <span class="hw-stat-label">RAM</span>
+                <span class="hw-stat-value">${hw.ram_gb} GB</span>
+            </div>
+            <div class="hw-stat">
+                <span class="hw-stat-label">GPU</span>
+                <span class="hw-stat-value ${hw.total_vram_gb > 0 ? 'gpu-accent' : ''}">${gpuText}</span>
+            </div>
+            ${hw.total_vram_gb > 0 ? `
+            <div class="hw-stat">
+                <span class="hw-stat-label">VRAM</span>
+                <span class="hw-stat-value gpu-accent">${hw.total_vram_gb} GB</span>
+            </div>` : ''}
+        </div>`;
+}
+
+function _recCardHtml(rec) {
+    const compatLabel = {
+        full_gpu: '⚡ Full GPU',
+        partial_gpu: '◑ Part GPU',
+        cpu_ok: '○ CPU only',
+    }[rec.compatibility] || rec.compatibility;
+
+    const tradeoffsHtml = rec.tradeoffs
+        .map((t) => `<div class="rec-tradeoff-item">${_escapeHtml(t)}</div>`)
+        .join('');
+
+    const strengthsHtml = rec.strengths
+        .map((s) => `<span class="rec-tag">${_escapeHtml(s)}</span>`)
+        .join('');
+
+    const pullId = `pull-${rec.rank}`;
+
+    return `
+        <div class="rec-card">
+            <div class="rec-card-header">
+                <span class="rec-rank">#${rec.rank}</span>
+                <div class="rec-title">
+                    <div class="rec-model-name">${_escapeHtml(rec.display_name)}</div>
+                    <div class="rec-meta">${_escapeHtml(rec.parameters)} · ${_escapeHtml(rec.context_window)} · ${_escapeHtml(rec.use_cases.join(', '))}</div>
+                </div>
+                <div class="rec-badges">
+                    <span class="rec-badge compat-${rec.compatibility}">${compatLabel}</span>
+                    <span class="rec-badge speed-${rec.speed}">${rec.speed}</span>
+                </div>
+            </div>
+            <div class="rec-compat-detail">${_escapeHtml(rec.compatibility_detail)}</div>
+            ${tradeoffsHtml ? `<div class="rec-tradeoffs">
+                <div class="rec-tradeoffs-label">Tradeoffs</div>
+                ${tradeoffsHtml}
+            </div>` : ''}
+            <div class="rec-strengths-row">${strengthsHtml}</div>
+            <div class="rec-pull-cmd">
+                <span class="rec-pull-code" id="${pullId}">${_escapeHtml(rec.ollama_pull)}</span>
+                <button class="rec-copy-btn" onclick="_copyPull('${pullId}', this)">Copy</button>
+            </div>
+        </div>`;
+}
+
+function _renderRecommendations(data) {
+    const bodyElement = document.getElementById('recModalBody');
+    if (!bodyElement) {
+        return;
+    }
+
+    const hw = data.hardware;
+    const recs = data.recommendations || [];
+
+    let html = _hwBannerHtml(hw);
+
+    if (recs.length === 0) {
+        html += `<div class="rec-error"><strong>No compatible models found</strong>Your hardware profile did not match any catalog entries.</div>`;
+    } else {
+        html += `<div class="rec-list">${recs.map(_recCardHtml).join('')}</div>`;
+    }
+
+    bodyElement.innerHTML = html;
+}
+
+function _copyPull(elementId, btn) {
+    const text = document.getElementById(elementId)?.textContent || '';
+    const original = btn.textContent;
+    copyToClipboard(text, btn);
+    void original; // already handled inside copyToClipboard
+}
+
+function _escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 window.newSession = newSession;
 window.sendMessage = sendMessage;
 window.cancelMessage = cancelMessage;
+window.openRecommendations = openRecommendations;
+window.closeRecommendations = closeRecommendations;
+window._copyPull = _copyPull;
 
 initializeApp();

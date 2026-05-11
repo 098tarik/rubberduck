@@ -3,3 +3,21 @@
 {"timestamp": "2026-05-02T01:37:10.303594+00:00", "event": "chat_error", "session_id": "5e563ca6-9778-4b5a-9ce6-e0d8d7d8e475", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
 {"timestamp": "2026-05-02T01:42:24.015689+00:00", "event": "chat_error", "session_id": "d9a2a959-d1e1-4a2e-a861-a3ee4bed28bd", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
 {"timestamp": "2026-05-02T01:42:52.287089+00:00", "event": "chat_error", "session_id": "661811ae-69ce-4e88-a3a5-51a3444a6b1c", "model": "gpt-4:cloud", "reason": "cloud_model_rejected"}
+{"timestamp": "2026-05-11T22:23:00.543309+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:23:00.561766+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:26:05.381916+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:26:05.386245+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:27:57.694562+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:27:57.758824+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:33:02.949440+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:33:02.953834+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:34:24.447722+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:34:24.451491+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:35:48.818578+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:35:48.822631+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:37:55.845582+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:37:55.850727+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:37:58.342029+00:00", "event": "sessions_listed", "count": 10}
+{"timestamp": "2026-05-11T22:37:58.347155+00:00", "event": "models_listed", "count": 6}
+{"timestamp": "2026-05-11T22:38:01.255655+00:00", "event": "recommendations_requested", "ram_gb": 7.9, "cpu_cores": 4, "gpu_count": 0, "total_vram_gb": 0}
+{"timestamp": "2026-05-11T22:38:01.820956+00:00", "event": "recommendations_requested", "ram_gb": 7.9, "cpu_cores": 4, "gpu_count": 0, "total_vram_gb": 0}

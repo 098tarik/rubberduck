@@ -76,7 +76,8 @@
             <div class="toolbar">
                 <select id="modelSelect" aria-label="Select model"></select>
                 <select id="sessionSelect" aria-label="Resume session"></select>
-                <button class="new-session-btn" onclick="newSession()">+ New</button>
+                <button class="new-session-btn" type="button" onclick="newSession()">+ New</button>
+                <button class="new-session-btn suggest-btn" type="button" id="suggestBtn" title="Suggest a model based on your hardware">Suggest Model</button>
                 <span class="session-id" id="sessionIdBadge"></span>
             </div>
             <div class="model-notice" id="modelNotice" hidden></div>
@@ -92,6 +93,21 @@
                 </button>
             </div>
             <div class="footer-text">rubberduck.ai</div>
+        </div>
+    </div>
+    <!-- Model Recommendations Modal -->
+    <div class="modal-overlay" id="recommendationsOverlay" hidden aria-modal="true" role="dialog" aria-labelledby="recModalTitle">
+        <div class="modal" id="recommendationsModal">
+            <div class="modal-header">
+                <h2 id="recModalTitle">⚡ Model Recommendations</h2>
+                <button class="modal-close" type="button" id="closeRecommendationsBtn" aria-label="Close">✕</button>
+            </div>
+            <div class="modal-body" id="recModalBody">
+                <div class="rec-loading">
+                    <div class="rec-spinner"></div>
+                    <span>Detecting your hardware…</span>
+                </div>
+            </div>
         </div>
     </div>
 

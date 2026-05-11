@@ -12,6 +12,7 @@ app = fastapi.FastAPI(title="RubberDuck")
 app.include_router(routes.chat_router, prefix="/api")
 app.include_router(routes.sessions_router, prefix="/api")
 app.include_router(routes.models_router, prefix="/api")
+app.include_router(routes.recommendations_router, prefix="/api")
 
 app.mount(
     "/static",

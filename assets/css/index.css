@@ -386,7 +386,7 @@ html, body {
     flex-wrap: wrap;
 }
 
-.toolbar select, .toolbar button.new-session-btn {
+.toolbar select, .toolbar button.new-session-btn, .toolbar button.suggest-btn {
     background: var(--surface);
     color: var(--text);
     border: 1px solid var(--border);
@@ -397,7 +397,7 @@ html, body {
     cursor: pointer;
 }
 
-.toolbar select:focus, .toolbar button.new-session-btn:focus {
+.toolbar select:focus, .toolbar button.new-session-btn:focus, .toolbar button.suggest-btn:focus {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--accent-glow);
 }
@@ -426,3 +426,322 @@ html, body {
 .model-notice strong {
     color: var(--accent);
 }
+
+/* ── Suggest Model button ─────────────────────────────────────────────── */
+.suggest-btn {
+    color: var(--text);
+    border: 1px solid rgba(245, 197, 24, 0.35);
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    white-space: nowrap;
+}
+
+.suggest-btn:hover {
+    background: rgba(245, 197, 24, 0.08);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ── Modal overlay ────────────────────────────────────────────────────── */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    animation: fadeIn 0.15s ease;
+}
+
+.modal-overlay[hidden] { display: none; }
+
+.modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(245, 197, 24, 0.08);
+    animation: slideUp 0.2s ease;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.modal-header h2 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.modal-close:hover {
+    color: var(--text);
+    background: var(--surface-2);
+}
+
+.modal-body {
+    padding: 20px 24px 24px;
+    overflow-y: auto;
+    flex: 1;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+
+/* ── Loading state ────────────────────────────────────────────────────── */
+.rec-loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    padding: 32px 0;
+    justify-content: center;
+}
+
+.rec-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Hardware summary banner ─────────────────────────────────────────── */
+.hw-banner {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+}
+
+.hw-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.hw-stat-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+}
+
+.hw-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--text);
+}
+
+.hw-stat-value.gpu-accent { color: var(--accent); }
+
+/* ── Recommendation cards ─────────────────────────────────────────────── */
+.rec-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rec-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 0.2s;
+}
+
+.rec-card:hover {
+    border-color: rgba(245, 197, 24, 0.3);
+}
+
+.rec-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.rec-rank {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 2px 8px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.rec-title {
+    flex: 1;
+}
+
+.rec-model-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 2px;
+}
+
+.rec-meta {
+    font-size: 0.74rem;
+    color: var(--text-dim);
+}
+
+.rec-badges {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.rec-badge {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    white-space: nowrap;
+}
+
+.rec-badge.compat-full_gpu { background: rgba(39, 174, 96, 0.18); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.3); }
+.rec-badge.compat-partial_gpu { background: rgba(243, 156, 18, 0.18); color: #f39c12; border: 1px solid rgba(243, 156, 18, 0.3); }
+.rec-badge.compat-cpu_ok { background: rgba(52, 152, 219, 0.18); color: #3498db; border: 1px solid rgba(52, 152, 219, 0.3); }
+
+.rec-badge.speed-fast { background: rgba(39, 174, 96, 0.1); color: #27ae60; border: 1px solid rgba(39, 174, 96, 0.25); }
+.rec-badge.speed-moderate { background: rgba(243, 156, 18, 0.1); color: #e6a817; border: 1px solid rgba(243, 156, 18, 0.25); }
+.rec-badge.speed-slow { background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.25); }
+
+.rec-compat-detail {
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    background: var(--surface);
+    border-radius: 6px;
+    border-left: 2px solid var(--border);
+}
+
+.rec-tradeoffs {
+    margin-bottom: 10px;
+}
+
+.rec-tradeoffs-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+.rec-tradeoff-item {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    display: flex;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+
+.rec-tradeoff-item::before { content: "→"; color: var(--accent); flex-shrink: 0; }
+
+.rec-strengths-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.rec-tag {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    background: rgba(245, 197, 24, 0.08);
+    border: 1px solid rgba(245, 197, 24, 0.18);
+    border-radius: 20px;
+    color: var(--text-dim);
+}
+
+.rec-pull-cmd {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 4px;
+}
+
+.rec-pull-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rec-copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.rec-copy-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+/* ── Error state ──────────────────────────────────────────────────────── */
+.rec-error {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+}
+
+.rec-error strong { color: #e74c3c; display: block; margin-bottom: 8px; }
+
