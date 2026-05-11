@@ -25,7 +25,7 @@ the cloud.
 ollama pull deepseek-r1:8b
 
 # 2. Install Python deps
-pip install -r requirements.txt
+pip install .
 
 # 3. Start the server
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload

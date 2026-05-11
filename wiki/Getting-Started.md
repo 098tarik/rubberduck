@@ -34,7 +34,7 @@ Smaller models (≤ 8 B parameters) respond faster on consumer hardware.
 ```bash
 git clone https://github.com/098tarik/rubberduck.git
 cd rubberduck
-pip install -r requirements.txt
+pip install .
 ```
 
 ## Run the server
