@@ -35,9 +35,9 @@ if (-not (Test-Path $VenvDir)) {
 $Py = Join-Path $VenvDir "Scripts\python.exe"
 $Pip = Join-Path $VenvDir "Scripts\pip.exe"
 
-& $Pip install --upgrade pip
-& $Pip install pyinstaller
-& $Pip install -e $RepoRoot
+& $Py -m pip install --upgrade pip
+& $Py -m pip install pyinstaller
+& $Py -m pip install -e $RepoRoot
 
 Write-Host "[3/7] Building RubberDuckServer.exe with PyInstaller..."
 if (Test-Path (Join-Path $RepoRoot "build")) { Remove-Item (Join-Path $RepoRoot "build") -Recurse -Force }
@@ -66,7 +66,7 @@ New-Item -ItemType Directory -Path $RuntimeRepoDir | Out-Null
 
 # Include project files so installed app has a complete local runtime snapshot.
 robocopy $RepoRoot $RuntimeRepoDir /E /NFL /NDL /NJH /NJS /NP `
-  /XD ".git" ".github" ".venv" "venv" "node_modules" "dist" "build" "__pycache__" "installers\windows\build" "installers\windows\dist"
+  /XD ".git" ".github" ".venv" ".venv-build" "venv" "node_modules" "dist" "build" "__pycache__" "installers\windows\build" "installers\windows\dist" "installers\windows\.venv-build"
 
 if ($LASTEXITCODE -gt 7) {
     throw "robocopy failed while creating runtime payload (exit code $LASTEXITCODE)"
@@ -79,6 +79,8 @@ if (-not (Test-Path $DistDir)) { New-Item -ItemType Directory -Path $DistDir | O
 heat dir $PyDistDir `
     -nologo `
     -gg `
+    -scom `
+    -sreg `
     -srd `
     -dr INSTALLFOLDER `
     -cg AppFiles `
