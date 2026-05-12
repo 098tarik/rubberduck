@@ -25,7 +25,7 @@
       </Directory>
     </Directory>
 
-    <DirectoryRef Id="INSTALLFOLDER">
+    <DirectoryRef Id="ApplicationProgramsFolder">
       <Component Id="ApplicationShortcutComponent" Guid="A3C9E0CC-82CA-4CC0-BF2A-17999D373A1E">
         <Shortcut
           Id="ApplicationStartMenuShortcut"
@@ -42,7 +42,7 @@
           WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="ApplicationProgramsFolderRemove" Directory="ApplicationProgramsFolder" On="uninstall" />
         <RegistryValue
-          Root="HKLM"
+          Root="HKCU"
           Key="Software\RubberDuck"
           Name="Installed"
           Type="integer"

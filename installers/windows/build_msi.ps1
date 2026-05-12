@@ -96,5 +96,8 @@ candle -nologo -dSourceDir="$PyDistDir" -out $AppFilesObj $HarvestWxs
 Write-Host "[7/7] Linking MSI..."
 $MsiPath = Join-Path $DistDir "RubberDuck-$Version.msi"
 light -nologo -ext WixUIExtension -out $MsiPath $ProductObj $AppFilesObj
+if ($LASTEXITCODE -ne 0) {
+    throw "light failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Done. MSI created at: $MsiPath"
