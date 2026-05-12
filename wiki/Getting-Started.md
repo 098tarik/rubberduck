@@ -48,6 +48,8 @@ cd rubberduck
 ```
 
 Prefer script-only setup? Use `.\scripts\install.ps1`.
+Prefer double-click install? Download and run `RubberDuck-Setup.exe` from the
+latest GitHub Release assets.
 
 ## Run the server
 

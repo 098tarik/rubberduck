@@ -52,6 +52,9 @@ For a wizard-style installer UI (MSI-like), use:
 .\scripts\install-ui.ps1
 ```
 
+For a double-click installer executable, download `RubberDuck-Setup.exe` from
+the latest GitHub Release assets.
+
 ## Run locally
 
 ### macOS
@@ -145,6 +148,8 @@ git clone https://github.com/098tarik/rubberduck.git
 cd rubberduck
 .\scripts\install-ui.ps1
 ```
+
+   Or double-click `RubberDuck-Setup.exe` from GitHub Releases.
 
    > If you see an execution-policy error, run:
    > `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
