@@ -44,8 +44,10 @@ cd rubberduck
 ```powershell
 git clone https://github.com/098tarik/rubberduck.git
 cd rubberduck
-.\scripts\install.ps1
+.\scripts\install-ui.ps1
 ```
+
+Prefer script-only setup? Use `.\scripts\install.ps1`.
 
 ## Run the server
 

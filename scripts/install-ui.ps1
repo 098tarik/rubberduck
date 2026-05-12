@@ -1,0 +1,405 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+$Root = Resolve-Path (Join-Path $PSScriptRoot "..")
+$InstallScript = Join-Path $PSScriptRoot "install.ps1"
+if (-not (Test-Path $InstallScript)) {
+    throw "install.ps1 not found at $InstallScript"
+}
+
+$steps = @("Welcome", "Prerequisites", "Install", "Finish")
+$stepIndex = 0
+$installExitCode = $null
+$installRunning = $false
+$installProcess = $null
+$syncHash = [hashtable]::Synchronized(@{})
+
+function Get-PythonInfo {
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        $version = (& py -3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") 2>$null
+        return @{ Found = $true; Version = $version; Command = "py -3" }
+    }
+    if (Get-Command python -ErrorAction SilentlyContinue) {
+        $version = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')") 2>$null
+        return @{ Found = $true; Version = $version; Command = "python" }
+    }
+    return @{ Found = $false; Version = ""; Command = "" }
+}
+
+function Test-Prerequisites {
+    $python = Get-PythonInfo
+    $pythonOk = $false
+    if ($python.Found -and $python.Version) {
+        $parts = $python.Version.Trim().Split(".")
+        if ($parts.Length -ge 2) {
+            $major = [int]$parts[0]
+            $minor = [int]$parts[1]
+            $pythonOk = ($major -gt 3) -or ($major -eq 3 -and $minor -ge 11)
+        }
+    }
+
+    $ollamaInstalled = [bool](Get-Command ollama -ErrorAction SilentlyContinue)
+    $ollamaRunning = $false
+    $modelsAvailable = $false
+    if ($ollamaInstalled) {
+        try {
+            $list = ollama list
+            $ollamaRunning = $true
+            $lines = @($list) | Where-Object { $_.Trim() -ne "" }
+            $modelsAvailable = $lines.Count -gt 1
+        } catch {
+            $ollamaRunning = $false
+        }
+    }
+
+    return @{
+        PythonFound = $python.Found
+        PythonVersion = $python.Version
+        PythonCommand = $python.Command
+        PythonOk = $pythonOk
+        OllamaInstalled = $ollamaInstalled
+        OllamaRunning = $ollamaRunning
+        ModelsAvailable = $modelsAvailable
+    }
+}
+
+function Set-StepHeader([string]$title, [string]$subtitle) {
+    $syncHash.StepTitle.Text = $title
+    $syncHash.SubTitle.Text = $subtitle
+}
+
+function Append-Log([string]$line) {
+    if ([string]::IsNullOrWhiteSpace($line)) {
+        return
+    }
+    if ($syncHash.LogBox.InvokeRequired) {
+        $syncHash.LogBox.BeginInvoke([Action[string]]{
+            param($msg)
+            $syncHash.LogBox.AppendText($msg + [Environment]::NewLine)
+        }, $line) | Out-Null
+    } else {
+        $syncHash.LogBox.AppendText($line + [Environment]::NewLine)
+    }
+}
+
+function Show-Step {
+    $syncHash.WelcomePanel.Visible = ($stepIndex -eq 0)
+    $syncHash.CheckPanel.Visible = ($stepIndex -eq 1)
+    $syncHash.InstallPanel.Visible = ($stepIndex -eq 2)
+    $syncHash.FinishPanel.Visible = ($stepIndex -eq 3)
+
+    $syncHash.BackButton.Enabled = ($stepIndex -gt 0 -and -not $installRunning)
+
+    switch ($stepIndex) {
+        0 {
+            Set-StepHeader "Welcome to the RubberDuck Setup Wizard" "This wizard installs RubberDuck on your machine."
+            $syncHash.NextButton.Text = "Next >"
+            $syncHash.NextButton.Enabled = $true
+        }
+        1 {
+            Set-StepHeader "Prerequisite Check" "Setup checks required software before install."
+            $result = Test-Prerequisites
+            $statusLines = @(
+                ("Python 3.11+: " + ($(if ($result.PythonOk) { "OK ($($result.PythonVersion))" } elseif ($result.PythonFound) { "Found $($result.PythonVersion) (needs 3.11+)" } else { "Not found" }))),
+                ("Ollama installed: " + $(if ($result.OllamaInstalled) { "Yes" } else { "No" })),
+                ("Ollama running: " + $(if ($result.OllamaRunning) { "Yes" } else { "No" })),
+                ("Ollama model pulled: " + $(if ($result.ModelsAvailable) { "Yes" } else { "No" }))
+            )
+            $syncHash.CheckBody.Text = ($statusLines -join [Environment]::NewLine) + [Environment]::NewLine + [Environment]::NewLine +
+                "Notes:" + [Environment]::NewLine +
+                "- Python 3.11+ is required to continue." + [Environment]::NewLine +
+                "- Ollama can be installed or configured later, but chats need it."
+            $syncHash.NextButton.Text = "Next >"
+            $syncHash.NextButton.Enabled = $result.PythonOk
+        }
+        2 {
+            Set-StepHeader "Ready to Install" "Click Install to begin."
+            if (-not $installRunning -and $installExitCode -eq $null) {
+                $syncHash.NextButton.Text = "Install"
+            }
+            if ($installRunning) {
+                $syncHash.NextButton.Enabled = $false
+                $syncHash.BackButton.Enabled = $false
+                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
+            } else {
+                $syncHash.NextButton.Enabled = ($installExitCode -eq $null)
+                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
+            }
+        }
+        3 {
+            Set-StepHeader "Setup Complete" "RubberDuck setup has finished."
+            $syncHash.BackButton.Enabled = $false
+            $syncHash.NextButton.Text = "Close"
+            $syncHash.NextButton.Enabled = $true
+        }
+    }
+}
+
+function Start-Install {
+    if ($installRunning) {
+        return
+    }
+    $installRunning = $true
+    $syncHash.LogBox.Clear()
+    $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
+    $syncHash.NextButton.Enabled = $false
+    $syncHash.BackButton.Enabled = $false
+    Append-Log "Starting install..."
+    Append-Log "Running: powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
+    Append-Log ""
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "powershell"
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$InstallScript`""
+    $psi.WorkingDirectory = "$Root"
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+    $proc.EnableRaisingEvents = $true
+
+    $outEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -Action {
+        if ($EventArgs.Data) { Append-Log $EventArgs.Data }
+    }
+    $errEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -Action {
+        if ($EventArgs.Data) { Append-Log "[stderr] $($EventArgs.Data)" }
+    }
+    $exitEvent = Register-ObjectEvent -InputObject $proc -EventName Exited -Action {
+        $script:installExitCode = $Event.Sender.ExitCode
+        $script:installRunning = $false
+        if ($script:installExitCode -eq 0) {
+            $syncHash.Form.BeginInvoke([Action]{
+                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
+                $syncHash.FinishBody.Text = "RubberDuck installed successfully." + [Environment]::NewLine + [Environment]::NewLine +
+                    "You can now run:" + [Environment]::NewLine +
+                    "1) .\.venv\Scripts\Activate.ps1" + [Environment]::NewLine +
+                    "2) uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+                $script:stepIndex = 3
+                Show-Step
+            }) | Out-Null
+        } else {
+            $syncHash.Form.BeginInvoke([Action]{
+                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
+                $syncHash.FinishBody.Text = "Setup failed with exit code $script:installExitCode." + [Environment]::NewLine +
+                    "Review the log output and retry."
+                $script:stepIndex = 3
+                Show-Step
+            }) | Out-Null
+        }
+        Unregister-Event -SubscriptionId $outEvent.Id -ErrorAction SilentlyContinue
+        Unregister-Event -SubscriptionId $errEvent.Id -ErrorAction SilentlyContinue
+        Unregister-Event -SubscriptionId $exitEvent.Id -ErrorAction SilentlyContinue
+    }
+
+    $null = $proc.Start()
+    $proc.BeginOutputReadLine()
+    $proc.BeginErrorReadLine()
+    $installProcess = $proc
+}
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "RubberDuck Setup"
+$form.StartPosition = "CenterScreen"
+$form.Size = New-Object System.Drawing.Size(760, 520)
+$form.FormBorderStyle = "FixedDialog"
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.BackColor = [System.Drawing.Color]::White
+
+$leftPanel = New-Object System.Windows.Forms.Panel
+$leftPanel.Dock = "Left"
+$leftPanel.Width = 180
+$leftPanel.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+$form.Controls.Add($leftPanel)
+
+$brandTitle = New-Object System.Windows.Forms.Label
+$brandTitle.ForeColor = [System.Drawing.Color]::White
+$brandTitle.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+$brandTitle.Text = "RubberDuck"
+$brandTitle.AutoSize = $true
+$brandTitle.Location = New-Object System.Drawing.Point(20, 40)
+$leftPanel.Controls.Add($brandTitle)
+
+$brandSub = New-Object System.Windows.Forms.Label
+$brandSub.ForeColor = [System.Drawing.Color]::White
+$brandSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$brandSub.Text = "Setup Wizard"
+$brandSub.AutoSize = $true
+$brandSub.Location = New-Object System.Drawing.Point(22, 75)
+$leftPanel.Controls.Add($brandSub)
+
+$content = New-Object System.Windows.Forms.Panel
+$content.Dock = "Fill"
+$content.Padding = New-Object System.Windows.Forms.Padding(20, 20, 20, 70)
+$form.Controls.Add($content)
+
+$stepTitle = New-Object System.Windows.Forms.Label
+$stepTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+$stepTitle.AutoSize = $true
+$stepTitle.Location = New-Object System.Drawing.Point(20, 20)
+$content.Controls.Add($stepTitle)
+
+$subTitle = New-Object System.Windows.Forms.Label
+$subTitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$subTitle.AutoSize = $true
+$subTitle.Location = New-Object System.Drawing.Point(22, 55)
+$content.Controls.Add($subTitle)
+
+$welcomePanel = New-Object System.Windows.Forms.Panel
+$welcomePanel.Location = New-Object System.Drawing.Point(20, 90)
+$welcomePanel.Size = New-Object System.Drawing.Size(510, 300)
+$content.Controls.Add($welcomePanel)
+
+$welcomeBody = New-Object System.Windows.Forms.Label
+$welcomeBody.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$welcomeBody.AutoSize = $false
+$welcomeBody.Size = New-Object System.Drawing.Size(510, 300)
+$welcomeBody.Text = "This wizard installs RubberDuck and prepares a Python virtual environment.`r`n`r`nClick Next to continue."
+$welcomePanel.Controls.Add($welcomeBody)
+
+$checkPanel = New-Object System.Windows.Forms.Panel
+$checkPanel.Location = New-Object System.Drawing.Point(20, 90)
+$checkPanel.Size = New-Object System.Drawing.Size(510, 300)
+$checkPanel.Visible = $false
+$content.Controls.Add($checkPanel)
+
+$checkBody = New-Object System.Windows.Forms.Label
+$checkBody.Font = New-Object System.Drawing.Font("Consolas", 10)
+$checkBody.AutoSize = $false
+$checkBody.Size = New-Object System.Drawing.Size(510, 300)
+$checkPanel.Controls.Add($checkBody)
+
+$installPanel = New-Object System.Windows.Forms.Panel
+$installPanel.Location = New-Object System.Drawing.Point(20, 90)
+$installPanel.Size = New-Object System.Drawing.Size(510, 300)
+$installPanel.Visible = $false
+$content.Controls.Add($installPanel)
+
+$installText = New-Object System.Windows.Forms.Label
+$installText.Text = "Setup will run the installer script and stream output below."
+$installText.AutoSize = $true
+$installText.Location = New-Object System.Drawing.Point(0, 0)
+$installPanel.Controls.Add($installText)
+
+$progress = New-Object System.Windows.Forms.ProgressBar
+$progress.Location = New-Object System.Drawing.Point(0, 25)
+$progress.Size = New-Object System.Drawing.Size(510, 20)
+$progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
+$installPanel.Controls.Add($progress)
+
+$logBox = New-Object System.Windows.Forms.TextBox
+$logBox.Location = New-Object System.Drawing.Point(0, 55)
+$logBox.Size = New-Object System.Drawing.Size(510, 245)
+$logBox.Multiline = $true
+$logBox.ScrollBars = "Vertical"
+$logBox.ReadOnly = $true
+$logBox.Font = New-Object System.Drawing.Font("Consolas", 9)
+$installPanel.Controls.Add($logBox)
+
+$finishPanel = New-Object System.Windows.Forms.Panel
+$finishPanel.Location = New-Object System.Drawing.Point(20, 90)
+$finishPanel.Size = New-Object System.Drawing.Size(510, 300)
+$finishPanel.Visible = $false
+$content.Controls.Add($finishPanel)
+
+$finishBody = New-Object System.Windows.Forms.Label
+$finishBody.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+$finishBody.AutoSize = $false
+$finishBody.Size = New-Object System.Drawing.Size(510, 300)
+$finishPanel.Controls.Add($finishBody)
+
+$buttonBar = New-Object System.Windows.Forms.Panel
+$buttonBar.Dock = "Bottom"
+$buttonBar.Height = 56
+$buttonBar.BackColor = [System.Drawing.Color]::FromArgb(245, 245, 245)
+$form.Controls.Add($buttonBar)
+
+$cancelButton = New-Object System.Windows.Forms.Button
+$cancelButton.Text = "Cancel"
+$cancelButton.Size = New-Object System.Drawing.Size(90, 28)
+$cancelButton.Location = New-Object System.Drawing.Point(650, 14)
+$cancelButton.Anchor = "Bottom,Right"
+$buttonBar.Controls.Add($cancelButton)
+
+$nextButton = New-Object System.Windows.Forms.Button
+$nextButton.Text = "Next >"
+$nextButton.Size = New-Object System.Drawing.Size(90, 28)
+$nextButton.Location = New-Object System.Drawing.Point(550, 14)
+$nextButton.Anchor = "Bottom,Right"
+$buttonBar.Controls.Add($nextButton)
+
+$backButton = New-Object System.Windows.Forms.Button
+$backButton.Text = "< Back"
+$backButton.Size = New-Object System.Drawing.Size(90, 28)
+$backButton.Location = New-Object System.Drawing.Point(450, 14)
+$backButton.Anchor = "Bottom,Right"
+$buttonBar.Controls.Add($backButton)
+
+$syncHash.Form = $form
+$syncHash.StepTitle = $stepTitle
+$syncHash.SubTitle = $subTitle
+$syncHash.WelcomePanel = $welcomePanel
+$syncHash.CheckPanel = $checkPanel
+$syncHash.InstallPanel = $installPanel
+$syncHash.FinishPanel = $finishPanel
+$syncHash.CheckBody = $checkBody
+$syncHash.LogBox = $logBox
+$syncHash.FinishBody = $finishBody
+$syncHash.Progress = $progress
+$syncHash.BackButton = $backButton
+$syncHash.NextButton = $nextButton
+
+$backButton.Add_Click({
+    if ($installRunning) { return }
+    if ($stepIndex -gt 0) {
+        $stepIndex--
+        Show-Step
+    }
+})
+
+$nextButton.Add_Click({
+    switch ($stepIndex) {
+        0 {
+            $stepIndex = 1
+            Show-Step
+        }
+        1 {
+            $stepIndex = 2
+            Show-Step
+        }
+        2 {
+            if (-not $installRunning -and $installExitCode -eq $null) {
+                Start-Install
+                Show-Step
+            }
+        }
+        3 {
+            $form.Close()
+        }
+    }
+})
+
+$cancelButton.Add_Click({
+    if ($installRunning -and $installProcess -and -not $installProcess.HasExited) {
+        $answer = [System.Windows.Forms.MessageBox]::Show(
+            "Installation is running. Exit setup?",
+            "Confirm Exit",
+            [System.Windows.Forms.MessageBoxButtons]::YesNo,
+            [System.Windows.Forms.MessageBoxIcon]::Question
+        )
+        if ($answer -eq [System.Windows.Forms.DialogResult]::No) {
+            return
+        }
+        try { $installProcess.Kill() } catch {}
+    }
+    $form.Close()
+})
+
+Show-Step
+[void]$form.ShowDialog()

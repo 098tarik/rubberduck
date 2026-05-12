@@ -46,6 +46,12 @@ After cloning the repository, use the installer for your platform:
 The installer checks Python, creates `.venv`, installs dependencies, and prints
 the exact command to start the app.
 
+For a wizard-style installer UI (MSI-like), use:
+
+```powershell
+.\scripts\install-ui.ps1
+```
+
 ## Run locally
 
 ### macOS
@@ -132,14 +138,12 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ollama pull deepseek-r1:8b
 ```
 
-4. Clone the repository and install dependencies:
+4. Clone the repository and run setup:
 
 ```powershell
 git clone https://github.com/098tarik/rubberduck.git
 cd rubberduck
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install .
+.\scripts\install-ui.ps1
 ```
 
    > If you see an execution-policy error, run:
