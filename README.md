@@ -27,6 +27,25 @@ Before you start, make sure you have:
 - [Ollama](https://ollama.com/download) installed and running
 - At least one Ollama model pulled locally
 
+## One-command installers
+
+After cloning the repository, use the installer for your platform:
+
+**macOS / Linux**
+
+```bash
+./scripts/install.sh
+```
+
+**Windows (PowerShell)**
+
+```powershell
+.\scripts\install.ps1
+```
+
+The installer checks Python, creates `.venv`, installs dependencies, and prints
+the exact command to start the app.
+
 ## Run locally
 
 ### macOS

@@ -31,10 +31,20 @@ Smaller models (≤ 8 B parameters) respond faster on consumer hardware.
 
 ## Install RubberDuck
 
+### macOS / Linux
+
 ```bash
 git clone https://github.com/098tarik/rubberduck.git
 cd rubberduck
-pip install .
+./scripts/install.sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+git clone https://github.com/098tarik/rubberduck.git
+cd rubberduck
+.\scripts\install.ps1
 ```
 
 ## Run the server

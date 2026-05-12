@@ -24,8 +24,8 @@ the cloud.
 # 1. Pull a model
 ollama pull deepseek-r1:8b
 
-# 2. Install Python deps
-pip install .
+# 2. Run the installer
+./scripts/install.sh
 
 # 3. Start the server
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
