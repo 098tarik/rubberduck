@@ -33,7 +33,6 @@ if (-not (Test-Path $VenvDir)) {
 }
 
 $Py = Join-Path $VenvDir "Scripts\python.exe"
-$Pip = Join-Path $VenvDir "Scripts\pip.exe"
 
 & $Py -m pip install --upgrade pip
 & $Py -m pip install pyinstaller
