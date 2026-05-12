@@ -25,10 +25,6 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
-    $InstallRoot = (Get-Location).Path
-}
-
 $Root = Resolve-Path $InstallRoot
 $Venv = Join-Path $Root ".venv"
 
@@ -94,7 +90,7 @@ if (Test-Path $InstallScript) {
     $Root = Resolve-Path (Join-Path $ScriptRoot "..")
 } else {
     $Root = Resolve-Path $ScriptRoot
-    $InstallScript = Join-Path ([System.IO.Path]::GetTempPath()) ("rubberduck-install-{0}.ps1" -f ([guid]::NewGuid().ToString("N")))
+    $InstallScript = Join-Path ([System.IO.Path]::GetTempPath()) "rubberduck-install-$([guid]::NewGuid().ToString('N')).ps1"
     $GeneratedInstallScript = $InstallScript
     Set-Content -Path $InstallScript -Value $EmbeddedInstallScript -Encoding UTF8
 }
