@@ -52,7 +52,7 @@ For a wizard-style installer UI (MSI-like), use:
 .\scripts\install-ui.ps1
 ```
 
-For a double-click installer executable, download `RubberDuck-Setup.exe` from
+For a double-click installer executable, download `rubberduck-setup.exe` from
 the latest GitHub Release assets.
 
 ## Run locally
@@ -149,7 +149,7 @@ cd rubberduck
 .\scripts\install-ui.ps1
 ```
 
-   Or double-click `RubberDuck-Setup.exe` from GitHub Releases.
+   Or double-click `rubberduck-setup.exe` from GitHub Releases.
 
    > If you see an execution-policy error, run:
    > `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`

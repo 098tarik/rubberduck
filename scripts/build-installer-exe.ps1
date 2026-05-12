@@ -16,7 +16,7 @@ if (-not (Test-Path $InputFile)) {
     throw "Missing installer UI script: $InputFile"
 }
 
-$OutputPath = Join-Path (Join-Path $Root $OutputDir) "RubberDuck-Setup.exe"
+$OutputPath = Join-Path (Join-Path $Root $OutputDir) "rubberduck-setup.exe"
 New-Item -Path (Split-Path -Parent $OutputPath) -ItemType Directory -Force | Out-Null
 
 Write-Host "==> Ensuring ps2exe module ($ModuleVersion)"

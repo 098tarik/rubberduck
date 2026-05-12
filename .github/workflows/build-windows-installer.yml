@@ -22,12 +22,12 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RubberDuck-Setup
-          path: dist/RubberDuck-Setup.exe
+          name: rubberduck-setup
+          path: dist/rubberduck-setup.exe
           if-no-files-found: error
 
       - name: Upload release asset
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/RubberDuck-Setup.exe
+          files: dist/rubberduck-setup.exe
