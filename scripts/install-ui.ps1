@@ -18,7 +18,7 @@ $ScriptRoot = $ScriptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::
 
 $EmbeddedInstallScript = @'
 param(
-    [string]$InstallRoot = (Get-Location).Path,
+    [string]$InstallRoot = "",
     [string]$PackageSource = ""
 )
 
@@ -34,7 +34,7 @@ $Venv = Join-Path $Root ".venv"
 
 if ([string]::IsNullOrWhiteSpace($PackageSource)) {
     if (Test-Path (Join-Path $Root "pyproject.toml")) {
-        $PackageSource = "$Root"
+        $PackageSource = $Root.Path
     } else {
         $PackageSource = "rubberduck"
     }
@@ -89,11 +89,13 @@ Write-Step "Installation complete"
 '@
 
 $InstallScript = Join-Path $ScriptRoot "install.ps1"
+$GeneratedInstallScript = $null
 if (Test-Path $InstallScript) {
     $Root = Resolve-Path (Join-Path $ScriptRoot "..")
 } else {
     $Root = Resolve-Path $ScriptRoot
     $InstallScript = Join-Path ([System.IO.Path]::GetTempPath()) ("rubberduck-install-{0}.ps1" -f ([guid]::NewGuid().ToString("N")))
+    $GeneratedInstallScript = $InstallScript
     Set-Content -Path $InstallScript -Value $EmbeddedInstallScript -Encoding UTF8
 }
 
@@ -104,6 +106,7 @@ $syncHash.InstallExitCode = $null
 $syncHash.InstallRunning = $false
 $syncHash.InstallProcess = $null
 $syncHash.InstallEventIds = @()
+$syncHash.GeneratedInstallScript = $GeneratedInstallScript
 
 function Get-PythonInfo {
     if (Get-Command py -ErrorAction SilentlyContinue) {
@@ -260,6 +263,10 @@ function Start-Install {
             Unregister-Event -SubscriptionId $id -ErrorAction SilentlyContinue
         }
         $sync.InstallEventIds = @()
+        if ($sync.GeneratedInstallScript) {
+            Remove-Item -Path $sync.GeneratedInstallScript -ErrorAction SilentlyContinue
+            $sync.GeneratedInstallScript = $null
+        }
     }
 
     $null = $proc.Start()
@@ -521,6 +528,13 @@ $cancelButton.Add_Click({
         try { $syncHash.InstallProcess.Kill() } catch {}
     }
     $form.Close()
+})
+
+$form.Add_FormClosed({
+    if ($syncHash.GeneratedInstallScript) {
+        Remove-Item -Path $syncHash.GeneratedInstallScript -ErrorAction SilentlyContinue
+        $syncHash.GeneratedInstallScript = $null
+    }
 })
 
 Show-Step
