@@ -13,12 +13,12 @@ if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
     $InstallRoot = (Get-Location).Path
 }
 
-$Root = Resolve-Path $InstallRoot
+$Root = (Resolve-Path $InstallRoot).Path
 $Venv = Join-Path $Root ".venv"
 
 if ([string]::IsNullOrWhiteSpace($PackageSource)) {
     if (Test-Path (Join-Path $Root "pyproject.toml")) {
-        $PackageSource = $Root.ProviderPath
+        $PackageSource = $Root
     } else {
         $PackageSource = "rubberduck"
     }

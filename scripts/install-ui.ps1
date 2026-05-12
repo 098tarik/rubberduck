@@ -25,12 +25,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$Root = Resolve-Path $InstallRoot
+$Root = (Resolve-Path $InstallRoot).Path
 $Venv = Join-Path $Root ".venv"
 
 if ([string]::IsNullOrWhiteSpace($PackageSource)) {
     if (Test-Path (Join-Path $Root "pyproject.toml")) {
-        $PackageSource = $Root.ProviderPath
+        $PackageSource = $Root
     } else {
         $PackageSource = "rubberduck"
     }
@@ -87,12 +87,16 @@ Write-Step "Installation complete"
 $InstallScript = Join-Path $ScriptRoot "install.ps1"
 $GeneratedInstallScript = $null
 if (Test-Path $InstallScript) {
-    $Root = Resolve-Path (Join-Path $ScriptRoot "..")
+    $Root = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 } else {
-    $Root = Resolve-Path $ScriptRoot
+    $Root = (Resolve-Path $ScriptRoot).Path
     $InstallScript = Join-Path ([System.IO.Path]::GetTempPath()) "rubberduck-install-$([guid]::NewGuid().ToString('N')).ps1"
     $GeneratedInstallScript = $InstallScript
-    Set-Content -Path $InstallScript -Value $EmbeddedInstallScript -Encoding UTF8
+    try {
+        Set-Content -Path $InstallScript -Value $EmbeddedInstallScript -Encoding UTF8
+    } catch {
+        throw "Failed to create installer helper script at $InstallScript. $($_.Exception.Message)"
+    }
 }
 
 $steps = @("Welcome", "Prerequisites", "Install", "Finish")
