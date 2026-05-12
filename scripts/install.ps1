@@ -1,7 +1,12 @@
+param(
+    [string]$InstallRoot = (Join-Path $PSScriptRoot ".."),
+    [string]$PackageSource = "https://github.com/098tarik/rubberduck/archive/refs/heads/main.zip"
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$Root = Resolve-Path (Join-Path $PSScriptRoot "..")
+$Root = Resolve-Path $InstallRoot
 $Venv = Join-Path $Root ".venv"
 
 function Write-Step([string]$Message) {
@@ -86,12 +91,7 @@ Write-Step "Upgrading pip"
 & $venvPython -m pip install --upgrade pip
 
 Write-Step "Installing RubberDuck"
-Push-Location $Root
-try {
-    & $venvPython -m pip install .
-} finally {
-    Pop-Location
-}
+& $venvPython -m pip install $PackageSource
 
 Write-Step "Installation complete"
 Write-Host @"

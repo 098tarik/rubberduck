@@ -16,10 +16,73 @@ if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
 }
 $ScriptRoot = $ScriptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 
-$Root = Resolve-Path (Join-Path $ScriptRoot "..")
+$EmbeddedInstallScript = @'
+param(
+    [string]$InstallRoot = (Get-Location).Path,
+    [string]$PackageSource = "https://github.com/098tarik/rubberduck/archive/refs/heads/main.zip"
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$Root = Resolve-Path $InstallRoot
+$Venv = Join-Path $Root ".venv"
+
+function Write-Step([string]$Message) {
+    Write-Host ""
+    Write-Host "==> $Message"
+}
+
+function Write-Warn([string]$Message) {
+    Write-Host ""
+    Write-Host "[warning] $Message" -ForegroundColor Yellow
+}
+
+function Fail([string]$Message) {
+    throw "[error] $Message"
+}
+
+function Get-PythonCommand {
+    if (Get-Command py -ErrorAction SilentlyContinue) { return @{ Exe = "py"; Args = @("-3") } }
+    if (Get-Command python -ErrorAction SilentlyContinue) { return @{ Exe = "python"; Args = @() } }
+    Fail "Python 3.11+ is required. Install it from https://www.python.org/downloads/"
+}
+
+function Invoke-Python([hashtable]$PyCmd, [string[]]$Args) { & $PyCmd.Exe @($PyCmd.Args + $Args) }
+
+function Assert-PythonVersion([hashtable]$PyCmd) {
+    $version = Invoke-Python -PyCmd $PyCmd -Args @("-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    $parts = $version.Trim().Split(".")
+    if ([int]$parts[0] -lt 3 -or ([int]$parts[0] -eq 3 -and [int]$parts[1] -lt 11)) { Fail "Python $version detected. Python 3.11+ is required." }
+}
+
+function Ensure-Ollama {
+    if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) { Write-Warn "Ollama is not installed. Install it from https://ollama.com/download before running chats."; return }
+    try { $list = ollama list } catch { Write-Warn "Ollama is installed but not running. Start it and run 'ollama pull deepseek-r1:8b'."; return }
+    if ((@($list) | Where-Object { $_.Trim() -ne "" }).Count -le 1) { Write-Warn "No Ollama models found. Pull one with: ollama pull deepseek-r1:8b" }
+}
+
+Write-Step "RubberDuck installer"
+$py = Get-PythonCommand
+Assert-PythonVersion -PyCmd $py
+Ensure-Ollama
+if (-not (Test-Path $Venv)) { Write-Step "Creating virtual environment at $Venv"; Invoke-Python -PyCmd $py -Args @("-m", "venv", $Venv) } else { Write-Step "Using existing virtual environment at $Venv" }
+$venvPython = Join-Path $Venv "Scripts\python.exe"
+if (-not (Test-Path $venvPython)) { Fail "Virtual environment is missing python.exe at $venvPython" }
+Write-Step "Upgrading pip"
+& $venvPython -m pip install --upgrade pip
+Write-Step "Installing RubberDuck"
+& $venvPython -m pip install $PackageSource
+Write-Step "Installation complete"
+'@
+
 $InstallScript = Join-Path $ScriptRoot "install.ps1"
-if (-not (Test-Path $InstallScript)) {
-    throw "install.ps1 not found at $InstallScript"
+if (Test-Path $InstallScript) {
+    $Root = Resolve-Path (Join-Path $ScriptRoot "..")
+} else {
+    $Root = Resolve-Path $ScriptRoot
+    $InstallScript = Join-Path ([System.IO.Path]::GetTempPath()) ("rubberduck-install-{0}.ps1" -f ([guid]::NewGuid().ToString("N")))
+    Set-Content -Path $InstallScript -Value $EmbeddedInstallScript -Encoding UTF8
 }
 
 $steps = @("Welcome", "Prerequisites", "Install", "Finish")
@@ -115,12 +178,12 @@ function Start-Install {
     $syncHash.NextButton.Enabled = $false
     $syncHash.BackButton.Enabled = $false
     Append-Log "Starting install..."
-    Append-Log "Running: powershell -ExecutionPolicy Bypass -File scripts/install.ps1"
+    Append-Log "Running: powershell -ExecutionPolicy Bypass -File $InstallScript -InstallRoot $Root"
     Append-Log ""
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "powershell"
-    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$InstallScript`""
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$InstallScript`" -InstallRoot `"$Root`""
     $psi.WorkingDirectory = "$Root"
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
