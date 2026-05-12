@@ -90,11 +90,13 @@ if (Test-Path $InstallScript) {
     $Root = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 } else {
     $Root = (Resolve-Path $ScriptRoot).Path
-    $InstallScript = Join-Path ([System.IO.Path]::GetTempPath()) "rubberduck-install-$([guid]::NewGuid().ToString('N')).ps1"
+    $InstallScript = [System.IO.Path]::GetTempFileName()
     $GeneratedInstallScript = $InstallScript
     try {
         Set-Content -Path $InstallScript -Value $EmbeddedInstallScript -Encoding UTF8
     } catch {
+        Remove-Item -Path $InstallScript -ErrorAction SilentlyContinue
+        $GeneratedInstallScript = $null
         throw "Failed to create installer helper script at $InstallScript. $($_.Exception.Message)"
     }
 }

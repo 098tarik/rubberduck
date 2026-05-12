@@ -6,11 +6,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-if ([string]::IsNullOrWhiteSpace($InstallRoot) -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
-    $InstallRoot = Join-Path $PSScriptRoot ".."
-}
 if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
-    $InstallRoot = (Get-Location).Path
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $InstallRoot = Join-Path $PSScriptRoot ".."
+    } else {
+        $InstallRoot = (Get-Location).Path
+    }
 }
 
 $Root = (Resolve-Path $InstallRoot).Path
