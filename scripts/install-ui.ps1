@@ -87,55 +87,8 @@ function Append-Log([string]$line) {
 }
 
 function Show-Step {
-    $syncHash.WelcomePanel.Visible = ($syncHash.StepIndex -eq 0)
-    $syncHash.CheckPanel.Visible = ($syncHash.StepIndex -eq 1)
-    $syncHash.InstallPanel.Visible = ($syncHash.StepIndex -eq 2)
-    $syncHash.FinishPanel.Visible = ($syncHash.StepIndex -eq 3)
-
-    $syncHash.BackButton.Enabled = ($syncHash.StepIndex -gt 0 -and -not $syncHash.InstallRunning)
-
-    switch ($syncHash.StepIndex) {
-        0 {
-            Set-StepHeader "Welcome to the RubberDuck Setup Wizard" "This wizard installs RubberDuck on your machine."
-            $syncHash.NextButton.Text = "Next >"
-            $syncHash.NextButton.Enabled = $true
-        }
-        1 {
-            Set-StepHeader "Prerequisite Check" "Setup checks required software before install."
-            $result = Test-Prerequisites
-            $statusLines = @(
-                ("Python 3.11+: " + ($(if ($result.PythonOk) { "OK ($($result.PythonVersion))" } elseif ($result.PythonFound) { "Found $($result.PythonVersion) (needs 3.11+)" } else { "Not found" }))),
-                ("Ollama installed: " + $(if ($result.OllamaInstalled) { "Yes" } else { "No" })),
-                ("Ollama running: " + $(if ($result.OllamaRunning) { "Yes" } else { "No" })),
-                ("Ollama model pulled: " + $(if ($result.ModelsAvailable) { "Yes" } else { "No" }))
-            )
-            $syncHash.CheckBody.Text = ($statusLines -join [Environment]::NewLine) + [Environment]::NewLine + [Environment]::NewLine +
-                "Notes:" + [Environment]::NewLine +
-                "- Python 3.11+ is required to continue." + [Environment]::NewLine +
-                "- Ollama can be installed or configured later, but chats need it."
-            $syncHash.NextButton.Text = "Next >"
-            $syncHash.NextButton.Enabled = $result.PythonOk
-        }
-        2 {
-            Set-StepHeader "Ready to Install" "Click Install to begin."
-            if (-not $syncHash.InstallRunning -and $syncHash.InstallExitCode -eq $null) {
-                $syncHash.NextButton.Text = "Install"
-            }
-            if ($syncHash.InstallRunning) {
-                $syncHash.NextButton.Enabled = $false
-                $syncHash.BackButton.Enabled = $false
-                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
-            } else {
-                $syncHash.NextButton.Enabled = ($syncHash.InstallExitCode -eq $null)
-                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
-            }
-        }
-        3 {
-            Set-StepHeader "Setup Complete" "RubberDuck setup has finished."
-            $syncHash.BackButton.Enabled = $false
-            $syncHash.NextButton.Text = "Close"
-            $syncHash.NextButton.Enabled = $true
-        }
+    if ($syncHash.ApplyStepUi) {
+        & $syncHash.ApplyStepUi $syncHash $syncHash.StepIndex
     }
 }
 
@@ -214,15 +167,7 @@ function Start-Install {
                     "Review the log output and retry."
             }
             $sync.StepIndex = 3
-            $sync.WelcomePanel.Visible = $false
-            $sync.CheckPanel.Visible = $false
-            $sync.InstallPanel.Visible = $false
-            $sync.FinishPanel.Visible = $true
-            $sync.StepTitle.Text = "Setup Complete"
-            $sync.SubTitle.Text = "RubberDuck setup has finished."
-            $sync.BackButton.Enabled = $false
-            $sync.NextButton.Text = "Close"
-            $sync.NextButton.Enabled = $true
+            & $sync.ApplyStepUi $sync $sync.StepIndex
         }) | Out-Null
         foreach ($id in @($sync.InstallEventIds + $Event.SubscriptionId)) {
             Unregister-Event -SubscriptionId $id -ErrorAction SilentlyContinue
@@ -387,6 +332,63 @@ $syncHash.FinishBody = $finishBody
 $syncHash.Progress = $progress
 $syncHash.BackButton = $backButton
 $syncHash.NextButton = $nextButton
+$syncHash.ApplyStepUi = {
+    param($sync, [int]$index)
+
+    $sync.WelcomePanel.Visible = ($index -eq 0)
+    $sync.CheckPanel.Visible = ($index -eq 1)
+    $sync.InstallPanel.Visible = ($index -eq 2)
+    $sync.FinishPanel.Visible = ($index -eq 3)
+    $sync.BackButton.Enabled = ($index -gt 0 -and -not $sync.InstallRunning)
+
+    switch ($index) {
+        0 {
+            $sync.StepTitle.Text = "Welcome to the RubberDuck Setup Wizard"
+            $sync.SubTitle.Text = "This wizard installs RubberDuck on your machine."
+            $sync.NextButton.Text = "Next >"
+            $sync.NextButton.Enabled = $true
+        }
+        1 {
+            $sync.StepTitle.Text = "Prerequisite Check"
+            $sync.SubTitle.Text = "Setup checks required software before install."
+            $result = Test-Prerequisites
+            $statusLines = @(
+                ("Python 3.11+: " + ($(if ($result.PythonOk) { "OK ($($result.PythonVersion))" } elseif ($result.PythonFound) { "Found $($result.PythonVersion) (needs 3.11+)" } else { "Not found" }))),
+                ("Ollama installed: " + $(if ($result.OllamaInstalled) { "Yes" } else { "No" })),
+                ("Ollama running: " + $(if ($result.OllamaRunning) { "Yes" } else { "No" })),
+                ("Ollama model pulled: " + $(if ($result.ModelsAvailable) { "Yes" } else { "No" }))
+            )
+            $sync.CheckBody.Text = ($statusLines -join [Environment]::NewLine) + [Environment]::NewLine + [Environment]::NewLine +
+                "Notes:" + [Environment]::NewLine +
+                "- Python 3.11+ is required to continue." + [Environment]::NewLine +
+                "- Ollama can be installed or configured later, but chats need it."
+            $sync.NextButton.Text = "Next >"
+            $sync.NextButton.Enabled = $result.PythonOk
+        }
+        2 {
+            $sync.StepTitle.Text = "Ready to Install"
+            $sync.SubTitle.Text = "Click Install to begin."
+            if (-not $sync.InstallRunning -and $sync.InstallExitCode -eq $null) {
+                $sync.NextButton.Text = "Install"
+            }
+            if ($sync.InstallRunning) {
+                $sync.NextButton.Enabled = $false
+                $sync.BackButton.Enabled = $false
+                $sync.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
+            } else {
+                $sync.NextButton.Enabled = ($sync.InstallExitCode -eq $null)
+                $sync.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
+            }
+        }
+        3 {
+            $sync.StepTitle.Text = "Setup Complete"
+            $sync.SubTitle.Text = "RubberDuck setup has finished."
+            $sync.BackButton.Enabled = $false
+            $sync.NextButton.Text = "Close"
+            $sync.NextButton.Enabled = $true
+        }
+    }
+}
 
 $backButton.Add_Click({
     if ($syncHash.InstallRunning) { return }
