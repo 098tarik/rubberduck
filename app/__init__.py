@@ -15,7 +15,11 @@ app = fastapi.FastAPI(title="RubberDuck")
 
 
 def _frontend_root() -> pathlib.Path:
-    """Resolve the frontend asset root in source and frozen runtimes."""
+    """Resolve frontend root in priority order: _MEIPASS, source tree, then CWD.
+
+    Returns the first location containing both index.html and assets/.
+    Raises FileNotFoundError if no valid frontend root is found.
+    """
     candidates: list[pathlib.Path] = []
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
@@ -27,7 +31,9 @@ def _frontend_root() -> pathlib.Path:
         if (base / "index.html").is_file() and (base / "assets").is_dir():
             return base
 
-    return candidates[0]
+    raise FileNotFoundError(
+        "Could not locate frontend assets (expected index.html and assets/)."
+    )
 
 
 _FRONTEND_ROOT = _frontend_root()
