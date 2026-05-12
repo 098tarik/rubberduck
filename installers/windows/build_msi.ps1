@@ -66,7 +66,7 @@ New-Item -ItemType Directory -Path $RuntimeRepoDir | Out-Null
 
 # Include project files so installed app has a complete local runtime snapshot.
 robocopy $RepoRoot $RuntimeRepoDir /E /NFL /NDL /NJH /NJS /NP `
-  /XD ".git" ".github" ".venv" ".venv-build" "venv" "node_modules" "dist" "build" "__pycache__" "installers\windows\build" "installers\windows\dist" "installers\windows\.venv-build"
+  /XD ".git" ".github" ".venv" "venv" "node_modules" "dist" "build" "__pycache__" "installers\windows\build" "installers\windows\dist" "installers\windows\.venv-build"
 
 if ($LASTEXITCODE -gt 7) {
     throw "robocopy failed while creating runtime payload (exit code $LASTEXITCODE)"
