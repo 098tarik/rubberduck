@@ -25,6 +25,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
+    $InstallRoot = (Get-Location).Path
+}
+
 if (-not (Test-Path $InstallRoot)) {
     throw "[error] Install root not found: $InstallRoot"
 }
