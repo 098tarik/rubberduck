@@ -14,6 +14,10 @@ if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
     }
 }
 
+if (-not (Test-Path $InstallRoot)) {
+    throw "[error] Install root not found: $InstallRoot"
+}
+
 $Root = (Resolve-Path $InstallRoot).Path
 $Venv = Join-Path $Root ".venv"
 

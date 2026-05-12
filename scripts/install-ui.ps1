@@ -25,6 +25,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+if (-not (Test-Path $InstallRoot)) {
+    throw "[error] Install root not found: $InstallRoot"
+}
+
 $Root = (Resolve-Path $InstallRoot).Path
 $Venv = Join-Path $Root ".venv"
 
@@ -90,7 +94,7 @@ if (Test-Path $InstallScript) {
     $Root = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 } else {
     $Root = (Resolve-Path $ScriptRoot).Path
-    $InstallScript = [System.IO.Path]::GetTempFileName()
+    $InstallScript = (New-TemporaryFile).FullName
     $GeneratedInstallScript = $InstallScript
     try {
         Set-Content -Path $InstallScript -Value $EmbeddedInstallScript -Encoding UTF8
