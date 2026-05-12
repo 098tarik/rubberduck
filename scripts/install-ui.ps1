@@ -4,8 +4,17 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$InstallScript = Join-Path $PSScriptRoot "install.ps1"
+$ScriptRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($ScriptRoot) -and $PSCommandPath) {
+    $ScriptRoot = Split-Path -Parent $PSCommandPath
+}
+if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
+    $ScriptRoot = [System.AppDomain]::CurrentDomain.BaseDirectory
+}
+$ScriptRoot = $ScriptRoot.TrimEnd('\', '/')
+
+$Root = Resolve-Path (Join-Path $ScriptRoot "..")
+$InstallScript = Join-Path $ScriptRoot "install.ps1"
 if (-not (Test-Path $InstallScript)) {
     throw "install.ps1 not found at $InstallScript"
 }
