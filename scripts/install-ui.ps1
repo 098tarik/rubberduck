@@ -19,7 +19,7 @@ $ScriptRoot = $ScriptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::
 $EmbeddedInstallScript = @'
 param(
     [string]$InstallRoot = (Get-Location).Path,
-    [string]$InstallScriptUrl = "https://raw.githubusercontent.com/098tarik/rubberduck/main/scripts/install.ps1"
+    [string]$PackageSource = ""
 )
 
 Set-StrictMode -Version Latest
@@ -29,13 +29,63 @@ if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
     $InstallRoot = (Get-Location).Path
 }
 
-$DownloadedInstallScript = Join-Path ([System.IO.Path]::GetTempPath()) ("rubberduck-install-source-{0}.ps1" -f ([guid]::NewGuid().ToString("N")))
-try {
-    Invoke-WebRequest -Uri $InstallScriptUrl -OutFile $DownloadedInstallScript
-    & $DownloadedInstallScript -InstallRoot $InstallRoot
-} finally {
-    Remove-Item -Path $DownloadedInstallScript -ErrorAction SilentlyContinue
+$Root = Resolve-Path $InstallRoot
+$Venv = Join-Path $Root ".venv"
+
+if ([string]::IsNullOrWhiteSpace($PackageSource)) {
+    if (Test-Path (Join-Path $Root "pyproject.toml")) {
+        $PackageSource = "$Root"
+    } else {
+        $PackageSource = "rubberduck"
+    }
 }
+
+function Write-Step([string]$Message) {
+    Write-Host ""
+    Write-Host "==> $Message"
+}
+
+function Write-Warn([string]$Message) {
+    Write-Host ""
+    Write-Host "[warning] $Message" -ForegroundColor Yellow
+}
+
+function Fail([string]$Message) {
+    throw "[error] $Message"
+}
+
+function Get-PythonCommand {
+    if (Get-Command py -ErrorAction SilentlyContinue) { return @{ Exe = "py"; Args = @("-3") } }
+    if (Get-Command python -ErrorAction SilentlyContinue) { return @{ Exe = "python"; Args = @() } }
+    Fail "Python 3.11+ is required. Install it from https://www.python.org/downloads/"
+}
+
+function Invoke-Python([hashtable]$PyCmd, [string[]]$Args) { & $PyCmd.Exe @($PyCmd.Args + $Args) }
+
+function Assert-PythonVersion([hashtable]$PyCmd) {
+    $version = Invoke-Python -PyCmd $PyCmd -Args @("-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    $parts = $version.Trim().Split(".")
+    if ([int]$parts[0] -lt 3 -or ([int]$parts[0] -eq 3 -and [int]$parts[1] -lt 11)) { Fail "Python $version detected. Python 3.11+ is required." }
+}
+
+function Ensure-Ollama {
+    if (-not (Get-Command ollama -ErrorAction SilentlyContinue)) { Write-Warn "Ollama is not installed. Install it from https://ollama.com/download before running chats."; return }
+    try { $list = ollama list } catch { Write-Warn "Ollama is installed but not running. Start it and run 'ollama pull deepseek-r1:8b'."; return }
+    if ((@($list) | Where-Object { $_.Trim() -ne "" }).Count -le 1) { Write-Warn "No Ollama models found. Pull one with: ollama pull deepseek-r1:8b" }
+}
+
+Write-Step "RubberDuck installer"
+$py = Get-PythonCommand
+Assert-PythonVersion -PyCmd $py
+Ensure-Ollama
+if (-not (Test-Path $Venv)) { Write-Step "Creating virtual environment at $Venv"; Invoke-Python -PyCmd $py -Args @("-m", "venv", $Venv) } else { Write-Step "Using existing virtual environment at $Venv" }
+$venvPython = Join-Path $Venv "Scripts\python.exe"
+if (-not (Test-Path $venvPython)) { Fail "Virtual environment is missing python.exe at $venvPython" }
+Write-Step "Upgrading pip"
+& $venvPython -m pip install --upgrade pip
+Write-Step "Installing RubberDuck"
+& $venvPython -m pip install $PackageSource
+Write-Step "Installation complete"
 '@
 
 $InstallScript = Join-Path $ScriptRoot "install.ps1"

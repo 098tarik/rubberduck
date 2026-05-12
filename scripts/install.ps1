@@ -1,21 +1,28 @@
 param(
     [string]$InstallRoot = "",
-    [string]$PackageSource = "https://github.com/098tarik/rubberduck/archive/refs/heads/main.zip"
+    [string]$PackageSource = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+if ([string]::IsNullOrWhiteSpace($InstallRoot) -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    $InstallRoot = Join-Path $PSScriptRoot ".."
+}
 if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
-    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
-        $InstallRoot = Join-Path $PSScriptRoot ".."
-    } else {
-        $InstallRoot = (Get-Location).Path
-    }
+    $InstallRoot = (Get-Location).Path
 }
 
 $Root = Resolve-Path $InstallRoot
 $Venv = Join-Path $Root ".venv"
+
+if ([string]::IsNullOrWhiteSpace($PackageSource)) {
+    if (Test-Path (Join-Path $Root "pyproject.toml")) {
+        $PackageSource = "$Root"
+    } else {
+        $PackageSource = "rubberduck"
+    }
+}
 
 function Write-Step([string]$Message) {
     Write-Host ""
