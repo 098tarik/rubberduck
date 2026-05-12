@@ -24,7 +24,7 @@ $module = Get-Module -ListAvailable -Name ps2exe | Sort-Object Version -Descendi
 if (-not $module -or $module.Version -lt [Version]$ModuleVersion) {
     Install-Module -Name ps2exe -Scope CurrentUser -Force -AllowClobber -RequiredVersion $ModuleVersion
 }
-Import-Module ps2exe -RequiredVersion $ModuleVersion -Force
+Import-Module ps2exe -MinimumVersion $ModuleVersion -Force
 
 Write-Host "==> Building installer executable"
 Invoke-ps2exe `

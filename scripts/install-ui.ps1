@@ -11,8 +11,8 @@ if (-not (Test-Path $InstallScript)) {
 }
 
 $steps = @("Welcome", "Prerequisites", "Install", "Finish")
-$stepIndex = 0
 $syncHash = [hashtable]::Synchronized(@{})
+$syncHash.StepIndex = 0
 $syncHash.InstallExitCode = $null
 $syncHash.InstallRunning = $false
 $syncHash.InstallProcess = $null
@@ -87,14 +87,14 @@ function Append-Log([string]$line) {
 }
 
 function Show-Step {
-    $syncHash.WelcomePanel.Visible = ($stepIndex -eq 0)
-    $syncHash.CheckPanel.Visible = ($stepIndex -eq 1)
-    $syncHash.InstallPanel.Visible = ($stepIndex -eq 2)
-    $syncHash.FinishPanel.Visible = ($stepIndex -eq 3)
+    $syncHash.WelcomePanel.Visible = ($syncHash.StepIndex -eq 0)
+    $syncHash.CheckPanel.Visible = ($syncHash.StepIndex -eq 1)
+    $syncHash.InstallPanel.Visible = ($syncHash.StepIndex -eq 2)
+    $syncHash.FinishPanel.Visible = ($syncHash.StepIndex -eq 3)
 
-    $syncHash.BackButton.Enabled = ($stepIndex -gt 0 -and -not $syncHash.InstallRunning)
+    $syncHash.BackButton.Enabled = ($syncHash.StepIndex -gt 0 -and -not $syncHash.InstallRunning)
 
-    switch ($stepIndex) {
+    switch ($syncHash.StepIndex) {
         0 {
             Set-StepHeader "Welcome to the RubberDuck Setup Wizard" "This wizard installs RubberDuck on your machine."
             $syncHash.NextButton.Text = "Next >"
@@ -213,8 +213,16 @@ function Start-Install {
                 $sync.FinishBody.Text = "Setup failed with exit code $($sync.InstallExitCode)." + [Environment]::NewLine +
                     "Review the log output and retry."
             }
-            $script:stepIndex = 3
-            Show-Step
+            $sync.StepIndex = 3
+            $sync.WelcomePanel.Visible = $false
+            $sync.CheckPanel.Visible = $false
+            $sync.InstallPanel.Visible = $false
+            $sync.FinishPanel.Visible = $true
+            $sync.StepTitle.Text = "Setup Complete"
+            $sync.SubTitle.Text = "RubberDuck setup has finished."
+            $sync.BackButton.Enabled = $false
+            $sync.NextButton.Text = "Close"
+            $sync.NextButton.Enabled = $true
         }) | Out-Null
         foreach ($id in @($sync.InstallEventIds + $Event.SubscriptionId)) {
             Unregister-Event -SubscriptionId $id -ErrorAction SilentlyContinue
@@ -382,20 +390,20 @@ $syncHash.NextButton = $nextButton
 
 $backButton.Add_Click({
     if ($syncHash.InstallRunning) { return }
-    if ($stepIndex -gt 0) {
-        $stepIndex--
+    if ($syncHash.StepIndex -gt 0) {
+        $syncHash.StepIndex--
         Show-Step
     }
 })
 
 $nextButton.Add_Click({
-    switch ($stepIndex) {
+    switch ($syncHash.StepIndex) {
         0 {
-            $stepIndex = 1
+            $syncHash.StepIndex = 1
             Show-Step
         }
         1 {
-            $stepIndex = 2
+            $syncHash.StepIndex = 2
             Show-Step
         }
         2 {
