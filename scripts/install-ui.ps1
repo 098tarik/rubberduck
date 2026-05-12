@@ -14,7 +14,7 @@ if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
 if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
     throw "Unable to determine installer script directory."
 }
-$ScriptRoot = $ScriptRoot.TrimEnd('\', '/')
+$ScriptRoot = $ScriptRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 
 $Root = Resolve-Path (Join-Path $ScriptRoot "..")
 $InstallScript = Join-Path $ScriptRoot "install.ps1"
