@@ -12,10 +12,11 @@ if (-not (Test-Path $InstallScript)) {
 
 $steps = @("Welcome", "Prerequisites", "Install", "Finish")
 $stepIndex = 0
-$installExitCode = $null
-$installRunning = $false
-$installProcess = $null
 $syncHash = [hashtable]::Synchronized(@{})
+$syncHash.InstallExitCode = $null
+$syncHash.InstallRunning = $false
+$syncHash.InstallProcess = $null
+$syncHash.InstallEventIds = @()
 
 function Get-PythonInfo {
     if (Get-Command py -ErrorAction SilentlyContinue) {
@@ -91,7 +92,7 @@ function Show-Step {
     $syncHash.InstallPanel.Visible = ($stepIndex -eq 2)
     $syncHash.FinishPanel.Visible = ($stepIndex -eq 3)
 
-    $syncHash.BackButton.Enabled = ($stepIndex -gt 0 -and -not $installRunning)
+    $syncHash.BackButton.Enabled = ($stepIndex -gt 0 -and -not $syncHash.InstallRunning)
 
     switch ($stepIndex) {
         0 {
@@ -117,15 +118,15 @@ function Show-Step {
         }
         2 {
             Set-StepHeader "Ready to Install" "Click Install to begin."
-            if (-not $installRunning -and $installExitCode -eq $null) {
+            if (-not $syncHash.InstallRunning -and $syncHash.InstallExitCode -eq $null) {
                 $syncHash.NextButton.Text = "Install"
             }
-            if ($installRunning) {
+            if ($syncHash.InstallRunning) {
                 $syncHash.NextButton.Enabled = $false
                 $syncHash.BackButton.Enabled = $false
                 $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
             } else {
-                $syncHash.NextButton.Enabled = ($installExitCode -eq $null)
+                $syncHash.NextButton.Enabled = ($syncHash.InstallExitCode -eq $null)
                 $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
             }
         }
@@ -139,10 +140,11 @@ function Show-Step {
 }
 
 function Start-Install {
-    if ($installRunning) {
+    if ($syncHash.InstallRunning) {
         return
     }
-    $installRunning = $true
+    $syncHash.InstallRunning = $true
+    $syncHash.InstallExitCode = $null
     $syncHash.LogBox.Clear()
     $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee
     $syncHash.NextButton.Enabled = $false
@@ -164,43 +166,66 @@ function Start-Install {
     $proc.StartInfo = $psi
     $proc.EnableRaisingEvents = $true
 
-    $outEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -Action {
-        if ($EventArgs.Data) { Append-Log $EventArgs.Data }
+    $eventData = @{ Sync = $syncHash }
+    $outEvent = Register-ObjectEvent -InputObject $proc -EventName OutputDataReceived -MessageData $eventData -Action {
+        $sync = $Event.MessageData.Sync
+        $line = $EventArgs.Data
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            if ($sync.LogBox.InvokeRequired) {
+                $sync.LogBox.BeginInvoke([Action[string]]{
+                    param($msg)
+                    $sync.LogBox.AppendText($msg + [Environment]::NewLine)
+                }, $line) | Out-Null
+            } else {
+                $sync.LogBox.AppendText($line + [Environment]::NewLine)
+            }
+        }
     }
-    $errEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -Action {
-        if ($EventArgs.Data) { Append-Log "[stderr] $($EventArgs.Data)" }
+    $errEvent = Register-ObjectEvent -InputObject $proc -EventName ErrorDataReceived -MessageData $eventData -Action {
+        $sync = $Event.MessageData.Sync
+        $line = $EventArgs.Data
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            $msg = "[stderr] $line"
+            if ($sync.LogBox.InvokeRequired) {
+                $sync.LogBox.BeginInvoke([Action[string]]{
+                    param($text)
+                    $sync.LogBox.AppendText($text + [Environment]::NewLine)
+                }, $msg) | Out-Null
+            } else {
+                $sync.LogBox.AppendText($msg + [Environment]::NewLine)
+            }
+        }
     }
-    $exitEvent = Register-ObjectEvent -InputObject $proc -EventName Exited -Action {
-        $script:installExitCode = $Event.Sender.ExitCode
-        $script:installRunning = $false
-        if ($script:installExitCode -eq 0) {
-            $syncHash.Form.BeginInvoke([Action]{
-                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
-                $syncHash.FinishBody.Text = "RubberDuck installed successfully." + [Environment]::NewLine + [Environment]::NewLine +
+    $syncHash.InstallEventIds = @($outEvent.Id, $errEvent.Id)
+    $exitEvent = Register-ObjectEvent -InputObject $proc -EventName Exited -MessageData $eventData -Action {
+        $sync = $Event.MessageData.Sync
+        $exitCode = $Event.Sender.ExitCode
+        $sync.InstallExitCode = $exitCode
+        $sync.InstallRunning = $false
+        $sync.Form.BeginInvoke([Action]{
+            $sync.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
+            if ($sync.InstallExitCode -eq 0) {
+                $sync.FinishBody.Text = "RubberDuck installed successfully." + [Environment]::NewLine + [Environment]::NewLine +
                     "You can now run:" + [Environment]::NewLine +
                     "1) .\.venv\Scripts\Activate.ps1" + [Environment]::NewLine +
                     "2) uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
-                $script:stepIndex = 3
-                Show-Step
-            }) | Out-Null
-        } else {
-            $syncHash.Form.BeginInvoke([Action]{
-                $syncHash.Progress.Style = [System.Windows.Forms.ProgressBarStyle]::Blocks
-                $syncHash.FinishBody.Text = "Setup failed with exit code $script:installExitCode." + [Environment]::NewLine +
+            } else {
+                $sync.FinishBody.Text = "Setup failed with exit code $($sync.InstallExitCode)." + [Environment]::NewLine +
                     "Review the log output and retry."
-                $script:stepIndex = 3
-                Show-Step
-            }) | Out-Null
+            }
+            $script:stepIndex = 3
+            Show-Step
+        }) | Out-Null
+        foreach ($id in @($sync.InstallEventIds + $Event.SubscriptionId)) {
+            Unregister-Event -SubscriptionId $id -ErrorAction SilentlyContinue
         }
-        Unregister-Event -SubscriptionId $outEvent.Id -ErrorAction SilentlyContinue
-        Unregister-Event -SubscriptionId $errEvent.Id -ErrorAction SilentlyContinue
-        Unregister-Event -SubscriptionId $exitEvent.Id -ErrorAction SilentlyContinue
+        $sync.InstallEventIds = @()
     }
 
     $null = $proc.Start()
     $proc.BeginOutputReadLine()
     $proc.BeginErrorReadLine()
-    $installProcess = $proc
+    $syncHash.InstallProcess = $proc
 }
 
 $form = New-Object System.Windows.Forms.Form
@@ -356,7 +381,7 @@ $syncHash.BackButton = $backButton
 $syncHash.NextButton = $nextButton
 
 $backButton.Add_Click({
-    if ($installRunning) { return }
+    if ($syncHash.InstallRunning) { return }
     if ($stepIndex -gt 0) {
         $stepIndex--
         Show-Step
@@ -374,7 +399,7 @@ $nextButton.Add_Click({
             Show-Step
         }
         2 {
-            if (-not $installRunning -and $installExitCode -eq $null) {
+            if (-not $syncHash.InstallRunning -and $syncHash.InstallExitCode -eq $null) {
                 Start-Install
                 Show-Step
             }
@@ -386,7 +411,7 @@ $nextButton.Add_Click({
 })
 
 $cancelButton.Add_Click({
-    if ($installRunning -and $installProcess -and -not $installProcess.HasExited) {
+    if ($syncHash.InstallRunning -and $syncHash.InstallProcess -and -not $syncHash.InstallProcess.HasExited) {
         $answer = [System.Windows.Forms.MessageBox]::Show(
             "Installation is running. Exit setup?",
             "Confirm Exit",
@@ -396,7 +421,7 @@ $cancelButton.Add_Click({
         if ($answer -eq [System.Windows.Forms.DialogResult]::No) {
             return
         }
-        try { $installProcess.Kill() } catch {}
+        try { $syncHash.InstallProcess.Kill() } catch {}
     }
     $form.Close()
 })
