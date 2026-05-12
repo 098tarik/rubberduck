@@ -106,7 +106,7 @@ async function loadModels() {
         const models = (payload.models || []).filter((m) => !m.endsWith(':cloud'));
 
         modelSelect.innerHTML = '';
-        const defaultModel = payload.default || 'deepseek-r1:8b';
+        const defaultModel = payload.default || 'gemma3:4b';
         for (const model of models.length ? models : [defaultModel]) {
             const option = document.createElement('option');
             option.value = model;
@@ -118,7 +118,7 @@ async function loadModels() {
         }
     } catch {
         modelSelect.innerHTML = (
-            '<option value="deepseek-r1:8b">deepseek-r1:8b</option>'
+            '<option value="gemma3:4b">gemma3:4b</option>'
         );
     }
 }

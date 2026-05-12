@@ -1,0 +1,23 @@
+RubberDuck Windows Package
+==========================
+
+This package contains everything required to run RubberDuck locally on Windows:
+
+- RubberDuck-<version>.msi (installer)
+- RubberDuckServer portable folder (same server payload as MSI)
+
+Quick start
+-----------
+1) Run the MSI installer.
+2) Open "RubberDuck Server" from Start Menu or desktop shortcut.
+3) On first launch, RubberDuck automatically:
+	- installs Ollama (via winget/choco if needed)
+	- starts Ollama
+	- pulls the default model
+4) Browser opens to http://127.0.0.1:8000 (or 8001 if 8000 is in use).
+
+Notes
+-----
+- Runtime data is stored under %LOCALAPPDATA%\RubberDuck\
+- If first-run model download is large, initial startup can take several minutes.
+- To choose a different model before launch, set OLLAMA_MODEL (for example qwen2.5:7b).

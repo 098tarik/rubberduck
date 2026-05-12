@@ -31,16 +31,16 @@ def test_fetch_available_models_returns_unique_names(monkeypatch) -> None:
         lambda *args, **kwargs: _FakeResponse(
             {
                 "models": [
-                    {"name": "deepseek-r1:8b"},
+                    {"name": "gemma3:4b"},
                     {"name": "llama3"},
-                    {"name": "deepseek-r1:8b"},
+                    {"name": "gemma3:4b"},
                     {"name": ""},
                 ]
             }
         ),
     )
 
-    assert duck.fetch_available_models() == ["deepseek-r1:8b", "llama3"]
+    assert duck.fetch_available_models() == ["gemma3:4b", "llama3"]
 
 
 def test_command_trie_returns_matching_commands() -> None:
@@ -75,13 +75,13 @@ def test_accept_top_completion_uses_first_result_when_none_selected() -> None:
 
 def test_model_picker_text_marks_cursor_and_current_model() -> None:
     fragments = duck._model_picker_text(
-        ["deepseek-r1:8b", "qwen2.5:0.5b"],
-        current_model="deepseek-r1:8b",
+        ["gemma3:4b", "qwen2.5:0.5b"],
+        current_model="gemma3:4b",
         cursor_index=1,
     )
 
     rendered = "".join(text for _, text in fragments)
-    assert "deepseek-r1:8b [current]" in rendered
+    assert "gemma3:4b [current]" in rendered
     assert "› qwen2.5:0.5b" in rendered
 
 

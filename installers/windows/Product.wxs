@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="RubberDuck"
+    Language="1033"
+    Version="$(var.ProductVersion)"
+    Manufacturer="RubberDuck"
+    UpgradeCode="9B3DF67E-3A4B-4C26-A567-DB4FA53C369A">
+
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" />
+
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of RubberDuck is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="RubberDuck" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="RubberDuck" />
+      </Directory>
+    </Directory>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="ApplicationShortcutComponent" Guid="A3C9E0CC-82CA-4CC0-BF2A-17999D373A1E">
+        <Shortcut
+          Id="ApplicationStartMenuShortcut"
+          Name="RubberDuck Server"
+          Description="Run RubberDuck local server"
+          Target="[INSTALLFOLDER]RubberDuckServer.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut
+          Id="ApplicationDesktopShortcut"
+          Directory="DesktopFolder"
+          Name="RubberDuck Server"
+          Description="Run RubberDuck local server"
+          Target="[INSTALLFOLDER]RubberDuckServer.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="ApplicationProgramsFolderRemove" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\RubberDuck"
+          Name="Installed"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="ProductFeature" Title="RubberDuck" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="ApplicationShortcutComponent" />
+    </Feature>
+
+    <UIRef Id="WixUI_Minimal" />
+  </Product>
+</Wix>

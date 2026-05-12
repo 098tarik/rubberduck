@@ -42,7 +42,7 @@ brew install python@3.11
 ```bash
 brew install ollama
 ollama serve &
-ollama pull deepseek-r1:8b
+ollama pull gemma3:4b
 ```
 
 3. Clone the repository and install dependencies:
@@ -77,7 +77,7 @@ sudo apt update && sudo apt install python3.11 python3.11-venv python3-pip -y
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ollama serve &
-ollama pull deepseek-r1:8b
+ollama pull gemma3:4b
 ```
 
 3. Clone the repository and install dependencies:
@@ -110,7 +110,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 3. Open **PowerShell** and pull a model:
 
 ```powershell
-ollama pull deepseek-r1:8b
+ollama pull gemma3:4b
 ```
 
 4. Clone the repository and install dependencies:
@@ -146,14 +146,14 @@ The app uses these environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_URL` | `http://localhost:11434` | URL of your Ollama server |
-| `OLLAMA_MODEL` | `deepseek-r1:8b` | Default model to use |
+| `OLLAMA_MODEL` | `gemma3:4b` | Default model to use |
 | `SESSIONS_DIR` | current directory | Folder used to store chat history |
 
 **macOS / Linux:**
 
 ```bash
 export OLLAMA_URL=http://localhost:11434
-export OLLAMA_MODEL=deepseek-r1:8b
+export OLLAMA_MODEL=gemma3:4b
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -161,7 +161,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ```powershell
 $env:OLLAMA_URL = "http://localhost:11434"
-$env:OLLAMA_MODEL = "deepseek-r1:8b"
+$env:OLLAMA_MODEL = "gemma3:4b"
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -169,7 +169,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ```cmd
 set OLLAMA_URL=http://localhost:11434
-set OLLAMA_MODEL=deepseek-r1:8b
+set OLLAMA_MODEL=gemma3:4b
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -188,7 +188,7 @@ Run the container:
 ```bash
 docker run --rm -p 8000:8000 \
   -e OLLAMA_URL=http://host.docker.internal:11434 \
-  -e OLLAMA_MODEL=deepseek-r1:8b \
+   -e OLLAMA_MODEL=gemma3:4b \
   rubberduck
 ```
 
@@ -197,7 +197,7 @@ docker run --rm -p 8000:8000 \
 ```powershell
 docker run --rm -p 8000:8000 `
   -e OLLAMA_URL=http://host.docker.internal:11434 `
-  -e OLLAMA_MODEL=deepseek-r1:8b `
+   -e OLLAMA_MODEL=gemma3:4b `
   rubberduck
 ```
 
@@ -206,6 +206,57 @@ Then open:
 ```text
 http://localhost:8000
 ```
+
+## Build Windows MSI Installer
+
+On a Windows machine, install these build tools first:
+
+- Python 3.11+
+- WiX Toolset v3 (`candle`, `light`, `heat` in `PATH`)
+
+Then from the repo root:
+
+```powershell
+cd installers/windows
+./build_msi.ps1 -Version 1.0.0
+```
+
+Or with Command Prompt:
+
+```bat
+cd installers\windows
+build_msi.bat 1.0.0
+```
+
+Output MSI:
+
+```text
+installers\windows\dist\RubberDuck-1.0.0.msi
+```
+
+After install, run `RubberDuck Server` from Start Menu (or desktop shortcut).
+It launches the bundled `.exe` and automates first-run setup:
+
+- installs Ollama if missing (via `winget` / `choco`)
+- starts Ollama
+- pulls the configured model (`OLLAMA_MODEL`, default `gemma3:4b`)
+- starts FastAPI locally and opens the browser
+
+Note: first run may take several minutes while the model downloads.
+
+### PR testing artifact
+
+The PR workflow `Build Windows MSI PR` uploads one combined artifact:
+
+```text
+rubberduck-windows-package-<version>.zip
+```
+
+That zip contains everything needed for testers in one download:
+
+- `RubberDuck-<version>.msi`
+- `RubberDuckServer/` portable bundle
+- `INSTALL-WINDOWS.txt`
 
 ## CLI
 

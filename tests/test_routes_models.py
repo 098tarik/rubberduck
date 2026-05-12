@@ -70,8 +70,8 @@ async def test_list_models_filters_cloud_models(client):
 
 
 async def test_list_models_returns_default(client, monkeypatch):
-    monkeypatch.setattr(config, "DEFAULT_MODEL", "deepseek-r1:8b")
-    mock_client = _make_mock_client({"models": [{"name": "deepseek-r1:8b"}]})
+    monkeypatch.setattr(config, "DEFAULT_MODEL", "gemma3:4b")
+    mock_client = _make_mock_client({"models": [{"name": "gemma3:4b"}]})
     with (
         patch("app.routes.models.httpx.AsyncClient", return_value=mock_client),
         patch("app.routes.models.telemetry.record"),
@@ -79,7 +79,7 @@ async def test_list_models_returns_default(client, monkeypatch):
         response = await client.get("/api/models")
 
     body = response.json()
-    assert body["default"] == "deepseek-r1:8b"
+    assert body["default"] == "gemma3:4b"
 
 
 async def test_list_models_ignores_entries_without_name(client):
@@ -97,7 +97,7 @@ async def test_list_models_ignores_entries_without_name(client):
 
 
 async def test_list_models_graceful_on_http_error(client, monkeypatch):
-    monkeypatch.setattr(config, "DEFAULT_MODEL", "deepseek-r1:8b")
+    monkeypatch.setattr(config, "DEFAULT_MODEL", "gemma3:4b")
 
     mock_client = AsyncMock()
     mock_client.__aenter__.return_value = mock_client
@@ -113,7 +113,7 @@ async def test_list_models_graceful_on_http_error(client, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     # Falls back to default model and includes an error key
-    assert body["default"] == "deepseek-r1:8b"
+    assert body["default"] == "gemma3:4b"
     assert "error" in body
 
 
