@@ -5,11 +5,14 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $ScriptRoot = $PSScriptRoot
-if ([string]::IsNullOrWhiteSpace($ScriptRoot) -and $PSCommandPath) {
+if ([string]::IsNullOrWhiteSpace($ScriptRoot) -and -not [string]::IsNullOrWhiteSpace($PSCommandPath)) {
     $ScriptRoot = Split-Path -Parent $PSCommandPath
 }
 if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
     $ScriptRoot = [System.AppDomain]::CurrentDomain.BaseDirectory
+}
+if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
+    throw "Unable to determine installer script directory."
 }
 $ScriptRoot = $ScriptRoot.TrimEnd('\', '/')
 
