@@ -1,10 +1,18 @@
 param(
-    [string]$InstallRoot = (Join-Path $PSScriptRoot ".."),
+    [string]$InstallRoot = "",
     [string]$PackageSource = "https://github.com/098tarik/rubberduck/archive/refs/heads/main.zip"
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($InstallRoot)) {
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $InstallRoot = Join-Path $PSScriptRoot ".."
+    } else {
+        $InstallRoot = (Get-Location).Path
+    }
+}
 
 $Root = Resolve-Path $InstallRoot
 $Venv = Join-Path $Root ".venv"
