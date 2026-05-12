@@ -18,7 +18,7 @@ $Venv = Join-Path $Root ".venv"
 
 if ([string]::IsNullOrWhiteSpace($PackageSource)) {
     if (Test-Path (Join-Path $Root "pyproject.toml")) {
-        $PackageSource = $Root.Path
+        $PackageSource = $Root.ProviderPath
     } else {
         $PackageSource = "rubberduck"
     }
