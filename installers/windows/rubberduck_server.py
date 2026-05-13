@@ -34,14 +34,16 @@ def _configure_file_logging() -> pathlib.Path:
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     root = logging.getLogger("rubberduck")
-    if not any(getattr(handler, "_rubberduck_file_handler", False) for handler in root.handlers):
+    if not any(
+        isinstance(handler, RotatingFileHandler) and handler.baseFilename == str(log_path)
+        for handler in root.handlers
+    ):
         file_handler = RotatingFileHandler(
             log_path,
             maxBytes=2_000_000,
             backupCount=5,
             encoding="utf-8",
         )
-        file_handler._rubberduck_file_handler = True  # type: ignore[attr-defined]
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
         )
@@ -215,6 +217,11 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 process.returncode,
                 attempt,
             )
+            if not _ollama_is_running():
+                LOGGER.error(
+                    "Spawned ollama process exited and service is still unreachable; stopping retries."
+                )
+                break
         time.sleep(1)
 
     if _ollama_is_running():
