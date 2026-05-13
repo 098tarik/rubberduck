@@ -24,7 +24,7 @@ LOGGER = logging.getLogger("rubberduck.launcher")
 
 
 def _configure_file_logging() -> pathlib.Path:
-    local_app_data = pathlib.Path(os.getenv("LOCALAPPDATA", pathlib.Path.home()))
+    local_app_data = pathlib.Path(os.getenv("LOCALAPPDATA", str(pathlib.Path.home())))
     app_home = local_app_data / "RubberDuck"
     app_home.mkdir(parents=True, exist_ok=True)
 
@@ -57,7 +57,7 @@ def _configure_file_logging() -> pathlib.Path:
 
 
 def _set_runtime_paths() -> None:
-    local_app_data = pathlib.Path(os.getenv("LOCALAPPDATA", pathlib.Path.home()))
+    local_app_data = pathlib.Path(os.getenv("LOCALAPPDATA", str(pathlib.Path.home())))
     app_home = local_app_data / "RubberDuck"
     sessions_dir = app_home / "sessions"
     telemetry_log = app_home / "telemetry.jsonl"
@@ -171,7 +171,7 @@ def _install_ollama() -> bool:
             return True
         except subprocess.CalledProcessError:
             print("[RubberDuck] winget install failed, trying Chocolatey...")
-            LOGGER.exception("winget install failed; trying Chocolatey.")
+            LOGGER.error("winget install failed; trying Chocolatey.")
 
     choco = shutil.which("choco")
     if choco:
@@ -181,7 +181,7 @@ def _install_ollama() -> bool:
             return True
         except subprocess.CalledProcessError:
             print("[RubberDuck] Chocolatey install failed.")
-            LOGGER.exception("Chocolatey install failed.")
+            LOGGER.error("Chocolatey install failed.")
 
     print("[RubberDuck] Could not auto-install Ollama. Please install from https://ollama.com/download/windows")
     LOGGER.error("Could not auto-install Ollama with winget/choco.")
