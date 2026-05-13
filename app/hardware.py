@@ -74,6 +74,12 @@ def _ram_gb_macos() -> float:
 
 
 def _ram_gb_windows() -> float:
+    def _to_gb_from_kb(value: int) -> float:
+        return round(value / (1024 ** 2), 1)
+
+    def _to_gb_from_bytes(value: int) -> float:
+        return round(value / (1024 ** 3), 1)
+
     try:
         out = subprocess.check_output(
             ["wmic", "OS", "get", "TotalVisibleMemorySize", "/Value"],
@@ -81,9 +87,28 @@ def _ram_gb_windows() -> float:
         )
         match = re.search(r"TotalVisibleMemorySize=(\d+)", out)
         if match:
-            return round(int(match.group(1)) / (1024 ** 2), 1)
+            return _to_gb_from_kb(int(match.group(1)))
     except (OSError, subprocess.SubprocessError):
         pass
+
+    # Newer Windows versions may not have wmic available.
+    # Fall back to PowerShell/CIM for total physical memory in bytes.
+    try:
+        out = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ],
+            text=True,
+        ).strip()
+        match = re.search(r"(\d+)", out)
+        if match:
+            return _to_gb_from_bytes(int(match.group(1)))
+    except (OSError, subprocess.SubprocessError):
+        pass
+
     return 0.0
 
 
