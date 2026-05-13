@@ -21,6 +21,7 @@ import webbrowser
 
 
 LOGGER = logging.getLogger("rubberduck.launcher")
+OLLAMA_SETTLE_DELAY_SECONDS = 0.2
 
 
 def _local_app_data_dir() -> pathlib.Path:
@@ -225,6 +226,17 @@ def _start_ollama(ollama_cmd: str) -> bool:
             LOGGER.info("Ollama service became ready on attempt %s.", attempt)
             return True
         if process.poll() is not None:
+            # If another Ollama instance is already serving, treat startup as healthy.
+            if _ollama_is_running():
+                # 0.2 seconds is enough to avoid transient false positives right after
+                # process exit without slowing startup in the common case.
+                time.sleep(OLLAMA_SETTLE_DELAY_SECONDS)
+                if _ollama_is_running():
+                    LOGGER.info(
+                        "Spawned ollama process exited early on attempt %s, but service is already reachable.",
+                        attempt,
+                    )
+                    return True
             LOGGER.warning(
                 "Spawned ollama process exited early with code %s (attempt %s).",
                 process.returncode,

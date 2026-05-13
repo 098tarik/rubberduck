@@ -14,42 +14,55 @@ from app import routes
 app = fastapi.FastAPI(title="RubberDuck")
 
 
-def _frontend_root() -> pathlib.Path:
-    """Resolve frontend root in priority order: _MEIPASS, source tree, then CWD.
-
-    Returns the first location containing both index.html and assets/.
-    Raises FileNotFoundError if no valid frontend root is found.
-    """
+def _frontend_candidates() -> list[pathlib.Path]:
     candidates: list[pathlib.Path] = []
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         candidates.append(pathlib.Path(meipass))
     candidates.append(pathlib.Path(__file__).resolve().parent.parent)
     candidates.append(pathlib.Path.cwd())
+    return candidates
 
-    for base in candidates:
-        if (base / "index.html").is_file() and (base / "assets").is_dir():
-            return base
 
-    raise FileNotFoundError(
-        "Could not locate frontend assets (expected index.html and assets/)."
+def _frontend_missing_message() -> str:
+    searched = ", ".join(str(path) for path in _frontend_candidates())
+    return (
+        "Could not locate frontend assets (expected index.html and assets/). "
+        f"Searched: {searched}. Ensure frontend build artifacts are present."
     )
 
 
-try:
-    _FRONTEND_ROOT: pathlib.Path | None = _frontend_root()
-except FileNotFoundError:
-    _FRONTEND_ROOT = None
+def _resolve_frontend_root() -> pathlib.Path:
+    """Resolve frontend root in priority order: _MEIPASS, source tree, then CWD.
+
+    Returns the first location containing both index.html and assets/.
+    Raises FileNotFoundError if no valid frontend root is found.
+    """
+    for base in _frontend_candidates():
+        if (base / "index.html").is_file() and (base / "assets").is_dir():
+            return base
+
+    raise FileNotFoundError(_frontend_missing_message())
+
+
+def _try_frontend_root() -> pathlib.Path | None:
+    try:
+        return _resolve_frontend_root()
+    except FileNotFoundError:
+        return None
+
+
+_OPTIONAL_FRONTEND_ROOT = _try_frontend_root()
 
 app.include_router(routes.chat_router, prefix="/api")
 app.include_router(routes.sessions_router, prefix="/api")
 app.include_router(routes.models_router, prefix="/api")
 app.include_router(routes.recommendations_router, prefix="/api")
 
-if _FRONTEND_ROOT is not None:
+if _OPTIONAL_FRONTEND_ROOT is not None:
     app.mount(
         "/static",
-        fastapi.staticfiles.StaticFiles(directory=str(_FRONTEND_ROOT)),
+        fastapi.staticfiles.StaticFiles(directory=str(_OPTIONAL_FRONTEND_ROOT)),
         name="static",
     )
 
@@ -61,10 +74,10 @@ _STATIC_ASSETS = [
 
 def _file_hash(url_path: str) -> str:
     """Return the first 8 hex digits of the SHA-256 hash of the file at url_path."""
-    if _FRONTEND_ROOT is None:
-        return "0"
+    if _OPTIONAL_FRONTEND_ROOT is None:
+        raise FileNotFoundError(_frontend_missing_message())
     # url_path starts with "/static/", which maps to the repo root via the mount
-    fs_path = _FRONTEND_ROOT / url_path.removeprefix("/static/").lstrip("/")
+    fs_path = _OPTIONAL_FRONTEND_ROOT / url_path.removeprefix("/static/").lstrip("/")
     try:
         return hashlib.sha256(fs_path.read_bytes()).hexdigest()[:8]
     except OSError:
@@ -74,12 +87,12 @@ def _file_hash(url_path: str) -> str:
 @app.get("/")
 async def root() -> fastapi.responses.HTMLResponse:
     """Serve the main frontend page with cache-busted static asset URLs."""
-    if _FRONTEND_ROOT is None:
+    if _OPTIONAL_FRONTEND_ROOT is None:
         raise fastapi.HTTPException(
             status_code=500,
-            detail="Could not locate frontend assets (expected index.html and assets/).",
+            detail=_frontend_missing_message(),
         )
-    html = (_FRONTEND_ROOT / "index.html").read_text(encoding="utf-8")
+    html = (_OPTIONAL_FRONTEND_ROOT / "index.html").read_text(encoding="utf-8")
 
     for asset_url in _STATIC_ASSETS:
         digest = _file_hash(asset_url)
