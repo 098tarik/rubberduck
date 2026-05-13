@@ -176,8 +176,8 @@ def _collect_ollama_startup_diagnostics(ollama_cmd: str) -> tuple[str, str]:
         )
         return diagnostic.stdout.strip(), diagnostic.stderr.strip()
     except subprocess.TimeoutExpired as error:
-        stdout = error.stdout.decode("utf-8", errors="replace") if isinstance(error.stdout, bytes) else (error.stdout or "")
-        stderr = error.stderr.decode("utf-8", errors="replace") if isinstance(error.stderr, bytes) else (error.stderr or "")
+        stdout = error.stdout or ""
+        stderr = error.stderr or ""
         LOGGER.error(
             "Ollama diagnostic command timed out after %.1fs; no immediate startup error surfaced.",
             OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS,
@@ -272,12 +272,12 @@ def _start_ollama(ollama_cmd: str) -> bool:
             if stdout_text:
                 LOGGER.error(
                     "Ollama diagnostic stdout: %s",
-                    stdout_text.strip()[:PROCESS_OUTPUT_LOG_LIMIT],
+                    stdout_text[:PROCESS_OUTPUT_LOG_LIMIT],
                 )
             if stderr_text:
                 LOGGER.error(
                     "Ollama diagnostic stderr: %s",
-                    stderr_text.strip()[:PROCESS_OUTPUT_LOG_LIMIT],
+                    stderr_text[:PROCESS_OUTPUT_LOG_LIMIT],
                 )
             if not stdout_text and not stderr_text:
                 LOGGER.error(
