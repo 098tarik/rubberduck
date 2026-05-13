@@ -165,13 +165,20 @@ def _run_command(command: list[str], check: bool = True) -> subprocess.Completed
     )
 
 
-def _collect_ollama_startup_diagnostics(ollama_cmd: str) -> tuple[str, str]:
+def _collect_ollama_startup_diagnostics(
+    ollama_cmd: str,
+) -> tuple[str, str, "subprocess.Popen[str] | None"]:
     """Try one short-lived foreground run to capture immediate startup errors.
 
-    If the process exits within OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS its stdout/stderr
-    are returned for error logging.  If the process is *still alive* after the
-    timeout it is left running — it may have become the actual server — and empty
-    strings are returned so the caller can re-check _ollama_is_running().
+    Returns ``(stdout, stderr, probe_proc)``.
+
+    * If the process exits within OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS its
+      stdout/stderr are returned and ``probe_proc`` is ``None`` (already
+      finished).
+    * If the process is *still alive* after the timeout it is returned as
+      ``probe_proc`` so the caller can decide whether to keep it (healthy
+      server) or terminate it (failure path).  In that case stdout/stderr are
+      empty strings.
     """
     def _as_text(value: str | bytes | None) -> str:
         if isinstance(value, bytes):
@@ -187,9 +194,8 @@ def _collect_ollama_startup_diagnostics(ollama_cmd: str) -> tuple[str, str]:
         )
     except OSError:
         LOGGER.exception("Failed to execute Ollama diagnostic command.")
-        return "", ""
+        return "", "", None
 
-    leave_running = False
     try:
         deadline = time.monotonic() + OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
@@ -201,22 +207,20 @@ def _collect_ollama_startup_diagnostics(ollama_cmd: str) -> tuple[str, str]:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     stdout, stderr = proc.communicate()
-                return _as_text(stdout).strip(), _as_text(stderr).strip()
+                return _as_text(stdout).strip(), _as_text(stderr).strip(), None
             time.sleep(OLLAMA_DIAGNOSTIC_POLL_INTERVAL_SECONDS)
 
-        # Still alive after the timeout window — the process likely started
-        # successfully.  Leave it running so it can serve requests; the caller
-        # will re-check _ollama_is_running() before declaring failure.
-        leave_running = True
+        # Still alive after the timeout window — the process *may* have become
+        # the actual server.  Return the handle so the caller can terminate it
+        # if the service is ultimately unreachable.
         LOGGER.warning(
             "Ollama diagnostic did not exit within %.1fs; process appears healthy "
             "and will continue running as the server.",
             OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS,
         )
-        return "", ""
+        return "", "", proc
     except Exception:
-        if not leave_running:
-            proc.kill()
+        proc.kill()
         raise
 
 
@@ -300,7 +304,7 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 process.returncode,
                 attempt,
             )
-            stdout_text, stderr_text = _collect_ollama_startup_diagnostics(ollama_cmd)
+            stdout_text, stderr_text, probe_proc = _collect_ollama_startup_diagnostics(ollama_cmd)
             if stdout_text:
                 LOGGER.error(
                     "Ollama diagnostic stdout: %s",
@@ -325,6 +329,11 @@ def _start_ollama(ollama_cmd: str) -> bool:
                     "treating startup as successful."
                 )
                 return True
+            # Service is still unreachable — the probe is not serving anything,
+            # so terminate it to avoid leaking a process with open PIPE handles.
+            if probe_proc is not None and probe_proc.poll() is None:
+                LOGGER.warning("Terminating leaked diagnostic probe (service unreachable).")
+                probe_proc.terminate()
             LOGGER.error(
                 "Spawned ollama process exited and service is still unreachable after "
                 "diagnostic; check manual command: \"%s serve\"",
