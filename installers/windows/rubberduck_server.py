@@ -166,6 +166,11 @@ def _run_command(command: list[str], check: bool = True) -> subprocess.Completed
 
 def _collect_ollama_startup_diagnostics(ollama_cmd: str) -> tuple[str, str]:
     """Try one short-lived foreground run to capture immediate startup errors."""
+    def _as_text(value: str | bytes | None) -> str:
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return value or ""
+
     try:
         diagnostic = subprocess.run(
             [ollama_cmd, "serve"],
@@ -174,10 +179,10 @@ def _collect_ollama_startup_diagnostics(ollama_cmd: str) -> tuple[str, str]:
             capture_output=True,
             timeout=OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS,
         )
-        return diagnostic.stdout.strip(), diagnostic.stderr.strip()
+        return _as_text(diagnostic.stdout).strip(), _as_text(diagnostic.stderr).strip()
     except subprocess.TimeoutExpired as error:
-        stdout = error.stdout or ""
-        stderr = error.stderr or ""
+        stdout = _as_text(error.stdout)
+        stderr = _as_text(error.stderr)
         LOGGER.error(
             "Ollama diagnostic command timed out after %.1fs; no immediate startup error surfaced.",
             OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS,
