@@ -23,8 +23,17 @@ import webbrowser
 LOGGER = logging.getLogger("rubberduck.launcher")
 
 
+def _local_app_data_dir() -> pathlib.Path:
+    local_app_data = os.getenv("LOCALAPPDATA")
+    if local_app_data:
+        return pathlib.Path(local_app_data)
+    fallback = pathlib.Path.home() / "AppData" / "Local"
+    LOGGER.warning("LOCALAPPDATA was not set; using fallback directory %s", fallback)
+    return fallback
+
+
 def _configure_file_logging() -> pathlib.Path:
-    local_app_data = pathlib.Path(os.getenv("LOCALAPPDATA", str(pathlib.Path.home())))
+    local_app_data = _local_app_data_dir()
     app_home = local_app_data / "RubberDuck"
     app_home.mkdir(parents=True, exist_ok=True)
 
@@ -34,8 +43,10 @@ def _configure_file_logging() -> pathlib.Path:
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     root = logging.getLogger("rubberduck")
+    resolved_log_path = log_path.resolve()
     if not any(
-        isinstance(handler, RotatingFileHandler) and handler.baseFilename == str(log_path)
+        isinstance(handler, RotatingFileHandler)
+        and pathlib.Path(handler.baseFilename).resolve() == resolved_log_path
         for handler in root.handlers
     ):
         file_handler = RotatingFileHandler(
@@ -57,7 +68,7 @@ def _configure_file_logging() -> pathlib.Path:
 
 
 def _set_runtime_paths() -> None:
-    local_app_data = pathlib.Path(os.getenv("LOCALAPPDATA", str(pathlib.Path.home())))
+    local_app_data = _local_app_data_dir()
     app_home = local_app_data / "RubberDuck"
     sessions_dir = app_home / "sessions"
     telemetry_log = app_home / "telemetry.jsonl"
@@ -221,7 +232,7 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 LOGGER.error(
                     "Spawned ollama process exited and service is still unreachable; stopping retries."
                 )
-                break
+                return False
         time.sleep(1)
 
     if _ollama_is_running():
