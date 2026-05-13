@@ -53,13 +53,17 @@ class HardwareProfile:
 # RAM helpers
 # ---------------------------------------------------------------------------
 
+def _to_gb(value: int, divisor: int) -> float:
+    return round(value / divisor, 1)
+
+
 def _ram_gb_linux() -> float:
     try:
         with open("/proc/meminfo") as f:
             for line in f:
                 if line.startswith("MemTotal:"):
                     kb = int(line.split()[1])
-                    return round(kb / (1024 ** 2), 1)
+                    return _to_gb(kb, 1024 ** 2)
     except OSError:
         pass
     return 0.0
@@ -68,18 +72,12 @@ def _ram_gb_linux() -> float:
 def _ram_gb_macos() -> float:
     try:
         out = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip()
-        return round(int(out) / (1024 ** 3), 1)
+        return _to_gb(int(out), 1024 ** 3)
     except (OSError, ValueError, subprocess.SubprocessError):
         return 0.0
 
 
 def _ram_gb_windows() -> float:
-    def _to_gb_from_kb(value: int) -> float:
-        return round(value / (1024 ** 2), 1)
-
-    def _to_gb_from_bytes(value: int) -> float:
-        return round(value / (1024 ** 3), 1)
-
     try:
         out = subprocess.check_output(
             ["wmic", "OS", "get", "TotalVisibleMemorySize", "/Value"],
@@ -87,7 +85,7 @@ def _ram_gb_windows() -> float:
         )
         match = re.search(r"TotalVisibleMemorySize=(\d+)", out)
         if match:
-            return _to_gb_from_kb(int(match.group(1)))
+            return _to_gb(int(match.group(1)), 1024 ** 2)
     except (OSError, subprocess.SubprocessError):
         pass
 
@@ -105,7 +103,7 @@ def _ram_gb_windows() -> float:
         ).strip()
         match = re.search(r"(\d+)", out)
         if match:
-            return _to_gb_from_bytes(int(match.group(1)))
+            return _to_gb(int(match.group(1)), 1024 ** 3)
     except (OSError, subprocess.SubprocessError):
         pass
 

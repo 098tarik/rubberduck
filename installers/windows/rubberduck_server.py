@@ -23,6 +23,7 @@ import webbrowser
 LOGGER = logging.getLogger("rubberduck.launcher")
 OLLAMA_SETTLE_DELAY_SECONDS = 0.2
 PROCESS_OUTPUT_LOG_LIMIT = 2_000
+PROCESS_OUTPUT_CAPTURE_TIMEOUT_SECONDS = 1.0
 
 
 def _local_app_data_dir() -> pathlib.Path:
@@ -247,7 +248,9 @@ def _start_ollama(ollama_cmd: str) -> bool:
             stdout_text = ""
             stderr_text = ""
             try:
-                stdout_text, stderr_text = process.communicate(timeout=1)
+                stdout_text, stderr_text = process.communicate(
+                    timeout=PROCESS_OUTPUT_CAPTURE_TIMEOUT_SECONDS
+                )
             except subprocess.TimeoutExpired:
                 pass
             if stdout_text:
