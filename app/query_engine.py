@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 import json
+import logging
 
 import httpx
 
@@ -17,6 +18,7 @@ STREAM_STATUS_LABELS = {
 }
 
 MEMORY_ERROR_FRAGMENT = "model requires more system memory"
+LOGGER = logging.getLogger("rubberduck.query_engine")
 
 
 class QueryEngine:
@@ -27,6 +29,12 @@ class QueryEngine:
         self.session_id = session_id
         self.model = model
         self._messages: history.SessionMessages = history.load_session(session_id)
+        LOGGER.info(
+            "Initialized query engine for session=%s model=%s history_messages=%s",
+            session_id,
+            model,
+            len(self._messages),
+        )
 
     def append(self, message: dict[str, object]) -> None:
         """Append a message and immediately persist session history."""
@@ -146,6 +154,12 @@ class QueryEngine:
         """
         user_msg = messages.UserMessage(content=user_content)
         self.append(user_msg.model_dump())
+        LOGGER.info(
+            "Query started for session=%s requested_model=%s message_length=%s",
+            self.session_id,
+            self.model,
+            len(user_content),
+        )
 
         system_context = context.build_system_context()
         ollama_messages = self._build_ollama_messages(system_context)
@@ -161,6 +175,12 @@ class QueryEngine:
 
                 while True:
                     yield self._status_frame("connecting", model=active_model)
+                    LOGGER.info(
+                        "Connecting to Ollama for session=%s model=%s url=%s/api/chat",
+                        self.session_id,
+                        active_model,
+                        config.OLLAMA_URL,
+                    )
                     async with client.stream(
                         "POST",
                         f"{config.OLLAMA_URL}/api/chat",
@@ -177,6 +197,13 @@ class QueryEngine:
                         if response.is_error:
                             await response.aread()
                             error_text = self._extract_error_message(response)
+                            LOGGER.warning(
+                                "Ollama returned error for session=%s model=%s status=%s error=%s",
+                                self.session_id,
+                                active_model,
+                                response.status_code,
+                                error_text,
+                            )
                             if not tried_fallback and self._is_memory_pressure_error(error_text):
                                 fallback_model = await self._find_smaller_model(
                                     client,
@@ -185,6 +212,12 @@ class QueryEngine:
                                 if fallback_model is not None:
                                     tried_fallback = True
                                     active_model = fallback_model
+                                    LOGGER.info(
+                                        "Applying fallback model for session=%s requested=%s fallback=%s",
+                                        self.session_id,
+                                        self.model,
+                                        fallback_model,
+                                    )
                                     yield self._status_frame(
                                         "preparing",
                                         label=f"Switching to {fallback_model} to fit memory...",
@@ -216,16 +249,33 @@ class QueryEngine:
                                     yielded_response_status = True
                                 yield frame
                             if should_stop:
+                                LOGGER.info(
+                                    "Received Ollama stream completion for session=%s model=%s",
+                                    self.session_id,
+                                    active_model,
+                                )
                                 break
                         break
 
             asst_msg = messages.AssistantMessage(content=full_text)
             self.append(asst_msg.model_dump())
+            LOGGER.info(
+                "Query completed for session=%s model=%s response_length=%s aborted=%s",
+                self.session_id,
+                self.model,
+                len(full_text),
+                aborted,
+            )
 
             if aborted:
                 yield "data: [DONE]\n\n"
 
         except httpx.HTTPError as error:
+            LOGGER.exception(
+                "HTTP error during query for session=%s model=%s",
+                self.session_id,
+                self.model,
+            )
             yield f"data: {json.dumps({'error': str(error)})}\n\n"
 
     def _build_ollama_messages(
@@ -250,6 +300,7 @@ class QueryEngine:
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
+            LOGGER.debug("Skipping non-JSON stream line from Ollama.")
             return full_text, False, None
 
         if payload.get("done"):

@@ -19,5 +19,6 @@ Quick start
 Notes
 -----
 - Runtime data is stored under %LOCALAPPDATA%\RubberDuck\
+- Runtime launcher/app logs are written to %LOCALAPPDATA%\RubberDuck\rubberduck.log
 - If first-run model download is large, initial startup can take several minutes.
 - To choose a different model before launch, set OLLAMA_MODEL (for example qwen2.5:7b).

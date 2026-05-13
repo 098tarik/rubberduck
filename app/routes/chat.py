@@ -1,6 +1,7 @@
 """Chat API routes."""
 
 import json
+import logging
 import uuid
 
 import fastapi
@@ -10,6 +11,7 @@ import pydantic
 from app import abort, config, query_engine, telemetry
 
 router = fastapi.APIRouter()
+LOGGER = logging.getLogger("rubberduck.routes.chat")
 
 
 class ChatRequest(pydantic.BaseModel):
@@ -29,6 +31,7 @@ def _is_cloud_model(model: str) -> bool:
 async def cancel_chat(request_id: str) -> dict[str, bool]:
     """Cancel an in-flight streaming chat request by its request ID."""
     cancelled = abort.request_abort(request_id)
+    LOGGER.info("Cancel request received for request_id=%s cancelled=%s", request_id, cancelled)
     if not cancelled:
         raise fastapi.HTTPException(
             status_code=404,
@@ -43,9 +46,22 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
     session_id = request.session_id or str(uuid.uuid4())
     request_id = str(uuid.uuid4())
     model = request.model or config.DEFAULT_MODEL
+    LOGGER.info(
+        "Chat request started request_id=%s session_id=%s model=%s message_length=%s",
+        request_id,
+        session_id,
+        model,
+        len(request.message),
+    )
 
     if _is_cloud_model(model):
         telemetry.record("chat_error", session_id=session_id, model=model, reason="cloud_model_rejected")
+        LOGGER.warning(
+            "Rejected cloud model for request_id=%s session_id=%s model=%s",
+            request_id,
+            session_id,
+            model,
+        )
         raise fastapi.HTTPException(
             status_code=400,
             detail="Cloud models are not supported. Please select a local Ollama model.",
@@ -73,6 +89,13 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
                 requested_model=model,
                 model=engine.model,
             )
+            LOGGER.info(
+                "Chat request completed request_id=%s session_id=%s requested_model=%s final_model=%s",
+                request_id,
+                session_id,
+                model,
+                engine.model,
+            )
         except Exception:
             telemetry.record(
                 "chat_error",
@@ -81,9 +104,17 @@ async def chat(request: ChatRequest) -> fastapi.responses.StreamingResponse:
                 model=engine.model,
                 reason="unexpected_error",
             )
+            LOGGER.exception(
+                "Unexpected chat error request_id=%s session_id=%s requested_model=%s current_model=%s",
+                request_id,
+                session_id,
+                model,
+                engine.model,
+            )
             yield f"data: {json.dumps({'error': 'An unexpected error occurred.'})}\n\n"
         finally:
             abort.cleanup_abort_controller(request_id)
+            LOGGER.info("Cleaned up chat request controller request_id=%s", request_id)
 
     return fastapi.responses.StreamingResponse(
         _stream_with_telemetry(),
