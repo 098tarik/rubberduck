@@ -101,7 +101,7 @@ def _ram_gb_windows() -> float:
             ],
             text=True,
         ).strip()
-        match = re.fullmatch(r"\s*(\d+)\s*", out)
+        match = re.fullmatch(r"(\d+)", out)
         if match:
             return _to_gb(int(match.group(1)), 1024 ** 3)
     except (OSError, subprocess.SubprocessError):

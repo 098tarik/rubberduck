@@ -23,7 +23,7 @@ import webbrowser
 LOGGER = logging.getLogger("rubberduck.launcher")
 OLLAMA_SETTLE_DELAY_SECONDS = 0.2
 PROCESS_OUTPUT_LOG_LIMIT = 2_000
-PROCESS_OUTPUT_CAPTURE_TIMEOUT_SECONDS = 1.0
+OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS = 3.0
 
 
 def _local_app_data_dir() -> pathlib.Path:
@@ -164,6 +164,30 @@ def _run_command(command: list[str], check: bool = True) -> subprocess.Completed
     )
 
 
+def _collect_ollama_startup_diagnostics(ollama_cmd: str) -> tuple[str, str]:
+    """Try one short-lived foreground run to capture immediate startup errors."""
+    try:
+        diagnostic = subprocess.run(
+            [ollama_cmd, "serve"],
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS,
+        )
+        return diagnostic.stdout.strip(), diagnostic.stderr.strip()
+    except subprocess.TimeoutExpired as error:
+        stdout = error.stdout.decode("utf-8", errors="replace") if isinstance(error.stdout, bytes) else (error.stdout or "")
+        stderr = error.stderr.decode("utf-8", errors="replace") if isinstance(error.stderr, bytes) else (error.stderr or "")
+        LOGGER.error(
+            "Ollama diagnostic command timed out after %.1fs; no immediate startup error surfaced.",
+            OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS,
+        )
+        return stdout.strip(), stderr.strip()
+    except OSError:
+        LOGGER.exception("Failed to execute Ollama diagnostic command.")
+        return "", ""
+
+
 def _install_ollama() -> bool:
     print("[RubberDuck] Ollama not detected. Installing automatically...")
     LOGGER.info("Ollama not detected. Attempting automatic installation.")
@@ -213,9 +237,8 @@ def _start_ollama(ollama_cmd: str) -> bool:
     try:
         process = subprocess.Popen(
             [ollama_cmd, "serve"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
         )
     except OSError:
@@ -245,27 +268,20 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 process.returncode,
                 attempt,
             )
-            stdout_text = ""
-            stderr_text = ""
-            try:
-                stdout_text, stderr_text = process.communicate(
-                    timeout=PROCESS_OUTPUT_CAPTURE_TIMEOUT_SECONDS
-                )
-            except subprocess.TimeoutExpired:
-                pass
+            stdout_text, stderr_text = _collect_ollama_startup_diagnostics(ollama_cmd)
             if stdout_text:
                 LOGGER.error(
-                    "Ollama early-exit stdout: %s",
+                    "Ollama diagnostic stdout: %s",
                     stdout_text.strip()[:PROCESS_OUTPUT_LOG_LIMIT],
                 )
             if stderr_text:
                 LOGGER.error(
-                    "Ollama early-exit stderr: %s",
+                    "Ollama diagnostic stderr: %s",
                     stderr_text.strip()[:PROCESS_OUTPUT_LOG_LIMIT],
                 )
             if not stdout_text and not stderr_text:
                 LOGGER.error(
-                    "Ollama exited without stdout/stderr output; check manual command: \"%s serve\"",
+                    "No diagnostic output captured; check manual command: \"%s serve\"",
                     ollama_cmd,
                 )
             LOGGER.error(
