@@ -22,6 +22,7 @@ import webbrowser
 
 LOGGER = logging.getLogger("rubberduck.launcher")
 OLLAMA_SETTLE_DELAY_SECONDS = 0.2
+PROCESS_OUTPUT_LOG_LIMIT = 2_000
 
 
 def _local_app_data_dir() -> pathlib.Path:
@@ -211,8 +212,9 @@ def _start_ollama(ollama_cmd: str) -> bool:
     try:
         process = subprocess.Popen(
             [ollama_cmd, "serve"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
             creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
         )
     except OSError:
@@ -242,6 +244,27 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 process.returncode,
                 attempt,
             )
+            stdout_text = ""
+            stderr_text = ""
+            try:
+                stdout_text, stderr_text = process.communicate(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
+            if stdout_text:
+                LOGGER.error(
+                    "Ollama early-exit stdout: %s",
+                    stdout_text.strip()[-PROCESS_OUTPUT_LOG_LIMIT:],
+                )
+            if stderr_text:
+                LOGGER.error(
+                    "Ollama early-exit stderr: %s",
+                    stderr_text.strip()[-PROCESS_OUTPUT_LOG_LIMIT:],
+                )
+            if not stdout_text and not stderr_text:
+                LOGGER.error(
+                    "Ollama exited without stdout/stderr output; check manual command: \"%s serve\"",
+                    ollama_cmd,
+                )
             LOGGER.error(
                 "Spawned ollama process exited and service is still unreachable; stopping retries."
             )
