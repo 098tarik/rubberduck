@@ -28,6 +28,7 @@ def _local_app_data_dir() -> pathlib.Path:
     if local_app_data:
         return pathlib.Path(local_app_data)
     fallback = pathlib.Path.home() / "AppData" / "Local"
+    print(f"[RubberDuck] Warning: LOCALAPPDATA not set, using fallback path: {fallback}")
     LOGGER.warning("LOCALAPPDATA was not set; using fallback directory %s", fallback)
     return fallback
 
@@ -219,7 +220,8 @@ def _start_ollama(ollama_cmd: str) -> bool:
 
     # Wait up to 25s for API readiness
     for attempt in range(1, 26):
-        if _ollama_is_running():
+        running = _ollama_is_running()
+        if running:
             LOGGER.info("Ollama service became ready on attempt %s.", attempt)
             return True
         if process.poll() is not None:
@@ -228,7 +230,7 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 process.returncode,
                 attempt,
             )
-            if not _ollama_is_running():
+            if not running:
                 LOGGER.error(
                     "Spawned ollama process exited and service is still unreachable; stopping retries."
                 )
@@ -299,7 +301,7 @@ def main() -> None:
         except Exception:
             LOGGER.exception("Failed to launch browser.")
 
-    LOGGER.info("Starting uvicorn. Logs file: %s", log_path)
+    LOGGER.info("Starting uvicorn. Log file: %s", log_path)
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
