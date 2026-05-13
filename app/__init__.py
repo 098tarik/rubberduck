@@ -36,18 +36,22 @@ def _frontend_root() -> pathlib.Path:
     )
 
 
-_FRONTEND_ROOT = _frontend_root()
+try:
+    _FRONTEND_ROOT: pathlib.Path | None = _frontend_root()
+except FileNotFoundError:
+    _FRONTEND_ROOT = None
 
 app.include_router(routes.chat_router, prefix="/api")
 app.include_router(routes.sessions_router, prefix="/api")
 app.include_router(routes.models_router, prefix="/api")
 app.include_router(routes.recommendations_router, prefix="/api")
 
-app.mount(
-    "/static",
-    fastapi.staticfiles.StaticFiles(directory=str(_FRONTEND_ROOT)),
-    name="static",
-)
+if _FRONTEND_ROOT is not None:
+    app.mount(
+        "/static",
+        fastapi.staticfiles.StaticFiles(directory=str(_FRONTEND_ROOT)),
+        name="static",
+    )
 
 _STATIC_ASSETS = [
     "/static/assets/css/index.css",
@@ -57,6 +61,8 @@ _STATIC_ASSETS = [
 
 def _file_hash(url_path: str) -> str:
     """Return the first 8 hex digits of the SHA-256 hash of the file at url_path."""
+    if _FRONTEND_ROOT is None:
+        return "0"
     # url_path starts with "/static/", which maps to the repo root via the mount
     fs_path = _FRONTEND_ROOT / url_path.removeprefix("/static/").lstrip("/")
     try:
@@ -68,6 +74,11 @@ def _file_hash(url_path: str) -> str:
 @app.get("/")
 async def root() -> fastapi.responses.HTMLResponse:
     """Serve the main frontend page with cache-busted static asset URLs."""
+    if _FRONTEND_ROOT is None:
+        raise fastapi.HTTPException(
+            status_code=500,
+            detail="Could not locate frontend assets (expected index.html and assets/).",
+        )
     html = (_FRONTEND_ROOT / "index.html").read_text(encoding="utf-8")
 
     for asset_url in _STATIC_ASSETS:

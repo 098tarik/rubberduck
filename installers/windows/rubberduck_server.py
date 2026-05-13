@@ -230,11 +230,10 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 process.returncode,
                 attempt,
             )
-            if not running:
-                LOGGER.error(
-                    "Spawned ollama process exited and service is still unreachable; stopping retries."
-                )
-                return False
+            LOGGER.error(
+                "Spawned ollama process exited and service is still unreachable; stopping retries."
+            )
+            return False
         time.sleep(1)
 
     if _ollama_is_running():
