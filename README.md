@@ -148,6 +148,8 @@ The app uses these environment variables:
 | `OLLAMA_URL` | `http://localhost:11434` | URL of your Ollama server |
 | `OLLAMA_MODEL` | `gemma3:4b` | Default model to use |
 | `SESSIONS_DIR` | current directory | Folder used to store chat history |
+| `TELEMETRY_LOG` | `./telemetry.jsonl` | Newline-delimited telemetry output path |
+| `RUBBERDUCK_LOG` | `./rubberduck.log` | Runtime diagnostics log file path |
 
 **macOS / Linux:**
 

@@ -1,16 +1,20 @@
 """Model discovery API routes."""
 
+import logging
+
 import fastapi
 import httpx
 
 from app import config, telemetry
 
 router = fastapi.APIRouter()
+LOGGER = logging.getLogger("rubberduck.routes.models")
 
 
 @router.get("/models")
 async def list_models() -> dict[str, object]:
     """Return available Ollama models for the frontend model picker."""
+    LOGGER.info("Listing models from Ollama endpoint %s/api/tags", config.OLLAMA_URL)
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -25,9 +29,11 @@ async def list_models() -> dict[str, object]:
             if item.get("name") and not item["name"].endswith(":cloud")
         ]
         telemetry.record("models_listed", count=len(models))
+        LOGGER.info("Listed %s local models.", len(models))
         return {"models": models, "default": config.DEFAULT_MODEL}
     except httpx.HTTPError as error:
         telemetry.record("models_listed_error", reason=str(error))
+        LOGGER.exception("Failed to list models from Ollama.")
         return {
             "models": [config.DEFAULT_MODEL],
             "default": config.DEFAULT_MODEL,
