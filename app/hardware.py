@@ -53,13 +53,17 @@ class HardwareProfile:
 # RAM helpers
 # ---------------------------------------------------------------------------
 
+def _to_gb(value: int, divisor: int) -> float:
+    return round(value / divisor, 1)
+
+
 def _ram_gb_linux() -> float:
     try:
         with open("/proc/meminfo") as f:
             for line in f:
                 if line.startswith("MemTotal:"):
                     kb = int(line.split()[1])
-                    return round(kb / (1024 ** 2), 1)
+                    return _to_gb(kb, 1024 ** 2)
     except OSError:
         pass
     return 0.0
@@ -68,7 +72,7 @@ def _ram_gb_linux() -> float:
 def _ram_gb_macos() -> float:
     try:
         out = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip()
-        return round(int(out) / (1024 ** 3), 1)
+        return _to_gb(int(out), 1024 ** 3)
     except (OSError, ValueError, subprocess.SubprocessError):
         return 0.0
 
@@ -81,9 +85,28 @@ def _ram_gb_windows() -> float:
         )
         match = re.search(r"TotalVisibleMemorySize=(\d+)", out)
         if match:
-            return round(int(match.group(1)) / (1024 ** 2), 1)
+            return _to_gb(int(match.group(1)), 1024 ** 2)
     except (OSError, subprocess.SubprocessError):
         pass
+
+    # Newer Windows versions may not have wmic available.
+    # Fall back to PowerShell/CIM for total physical memory in bytes.
+    try:
+        out = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ],
+            text=True,
+        ).strip()
+        match = re.fullmatch(r"(\d+)", out)
+        if match:
+            return _to_gb(int(match.group(1)), 1024 ** 3)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
     return 0.0
 
 

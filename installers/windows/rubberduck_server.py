@@ -22,6 +22,9 @@ import webbrowser
 
 LOGGER = logging.getLogger("rubberduck.launcher")
 OLLAMA_SETTLE_DELAY_SECONDS = 0.2
+PROCESS_OUTPUT_LOG_LIMIT = 2_000
+OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS = 3.0
+OLLAMA_DIAGNOSTIC_POLL_INTERVAL_SECONDS = 0.1
 
 
 def _local_app_data_dir() -> pathlib.Path:
@@ -162,6 +165,65 @@ def _run_command(command: list[str], check: bool = True) -> subprocess.Completed
     )
 
 
+def _collect_ollama_startup_diagnostics(
+    ollama_cmd: str,
+) -> tuple[str, str, "subprocess.Popen[str] | None"]:
+    """Try one short-lived foreground run to capture immediate startup errors.
+
+    Returns ``(stdout, stderr, probe_proc)``.
+
+    * If the process exits within OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS its
+      stdout/stderr are returned and ``probe_proc`` is ``None`` (already
+      finished).
+    * If the process is *still alive* after the timeout it is returned as
+      ``probe_proc`` so the caller can decide whether to keep it (healthy
+      server) or terminate it (failure path).  In that case stdout/stderr are
+      empty strings.
+    """
+    def _as_text(value: str | bytes | None) -> str:
+        if isinstance(value, bytes):
+            return value.decode("utf-8", errors="replace")
+        return value or ""
+
+    try:
+        proc = subprocess.Popen(
+            [ollama_cmd, "serve"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except OSError:
+        LOGGER.exception("Failed to execute Ollama diagnostic command.")
+        return "", "", None
+
+    try:
+        deadline = time.monotonic() + OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                # Exited quickly — drain pipes with a safety timeout to avoid
+                # blocking on unexpectedly large buffered output.
+                try:
+                    stdout, stderr = proc.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    stdout, stderr = proc.communicate()
+                return _as_text(stdout).strip(), _as_text(stderr).strip(), None
+            time.sleep(OLLAMA_DIAGNOSTIC_POLL_INTERVAL_SECONDS)
+
+        # Still alive after the timeout window — the process *may* have become
+        # the actual server.  Return the handle so the caller can terminate it
+        # if the service is ultimately unreachable.
+        LOGGER.warning(
+            "Ollama diagnostic did not exit within %.1fs; process appears healthy "
+            "and will continue running as the server.",
+            OLLAMA_DIAGNOSTIC_TIMEOUT_SECONDS,
+        )
+        return "", "", proc
+    except Exception:
+        proc.kill()
+        raise
+
+
 def _install_ollama() -> bool:
     print("[RubberDuck] Ollama not detected. Installing automatically...")
     LOGGER.info("Ollama not detected. Attempting automatic installation.")
@@ -242,8 +304,40 @@ def _start_ollama(ollama_cmd: str) -> bool:
                 process.returncode,
                 attempt,
             )
+            stdout_text, stderr_text, probe_proc = _collect_ollama_startup_diagnostics(ollama_cmd)
+            if stdout_text:
+                LOGGER.error(
+                    "Ollama diagnostic stdout: %s",
+                    stdout_text[:PROCESS_OUTPUT_LOG_LIMIT],
+                )
+            if stderr_text:
+                LOGGER.error(
+                    "Ollama diagnostic stderr: %s",
+                    stderr_text[:PROCESS_OUTPUT_LOG_LIMIT],
+                )
+            if not stdout_text and not stderr_text:
+                LOGGER.warning(
+                    "No diagnostic output captured; the diagnostic process may have started "
+                    "successfully. Rechecking service reachability."
+                )
+            # The diagnostic probe may have become the running server (transient
+            # crash on the original process, successful restart during diagnostics).
+            time.sleep(OLLAMA_SETTLE_DELAY_SECONDS)
+            if _ollama_is_running():
+                LOGGER.info(
+                    "Ollama service became reachable after diagnostic probe; "
+                    "treating startup as successful."
+                )
+                return True
+            # Service is still unreachable — the probe is not serving anything,
+            # so terminate it to avoid leaking a process with open PIPE handles.
+            if probe_proc is not None and probe_proc.poll() is None:
+                LOGGER.warning("Terminating leaked diagnostic probe (service unreachable).")
+                probe_proc.terminate()
             LOGGER.error(
-                "Spawned ollama process exited and service is still unreachable; stopping retries."
+                "Spawned ollama process exited and service is still unreachable after "
+                "diagnostic; check manual command: \"%s serve\"",
+                ollama_cmd,
             )
             return False
         time.sleep(1)
