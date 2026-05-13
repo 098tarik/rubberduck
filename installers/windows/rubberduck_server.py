@@ -253,12 +253,12 @@ def _start_ollama(ollama_cmd: str) -> bool:
             if stdout_text:
                 LOGGER.error(
                     "Ollama early-exit stdout: %s",
-                    stdout_text.strip()[-PROCESS_OUTPUT_LOG_LIMIT:],
+                    stdout_text.strip()[:PROCESS_OUTPUT_LOG_LIMIT],
                 )
             if stderr_text:
                 LOGGER.error(
                     "Ollama early-exit stderr: %s",
-                    stderr_text.strip()[-PROCESS_OUTPUT_LOG_LIMIT:],
+                    stderr_text.strip()[:PROCESS_OUTPUT_LOG_LIMIT],
                 )
             if not stdout_text and not stderr_text:
                 LOGGER.error(
